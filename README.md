@@ -102,7 +102,7 @@ Public repository — pull requests welcome for bug fixes, MCP tools, and framew
 
 ## License
 
-[MIT](LICENSE) — see repository root when added.
+[MIT](LICENSE)
 
 ## Links
 
