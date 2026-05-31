@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { createDidDocument } from '../../did/create.js';
 import { discoverAgents } from '../../discover/index.js';
+import { getDeliveryStatus } from '../../delivery/index.js';
 import { mandatePrepare, purchaseBundle } from '../../payments/index.js';
 
 /**
@@ -11,7 +12,8 @@ export function registerPlenipoTools(server: McpServer): void {
   server.registerTool(
     'plenipo_send',
     {
-      description: 'Send an encrypted message to another agent by DID',
+      description:
+        'Send an encrypted message to another agent by DID (offline recipients are queued with ack.status queued)',
       inputSchema: {
         recipientDid: z.string(),
         message: z.string(),
@@ -110,6 +112,23 @@ export function registerPlenipoTools(server: McpServer): void {
       });
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'plenipo_delivery_status',
+    {
+      description: 'Get delivery status for an envelope (queued, delivered, receipt_confirmed, expired)',
+      inputSchema: {
+        envelopeId: z.string(),
+        relayUrl: z.string().default('http://localhost:4000'),
+      },
+    },
+    async ({ envelopeId, relayUrl }) => {
+      const status = await getDeliveryStatus(relayUrl, envelopeId);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(status, null, 2) }],
       };
     },
   );
