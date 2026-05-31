@@ -3,6 +3,7 @@ import { decodeBase64Url, encodeBase64Url } from '../crypto/base64url.js';
 import { sign } from '../crypto/ed25519.js';
 import { buildSigningInput } from '../crypto/signingInput.js';
 import { seal } from '../crypto/sealedBox.js';
+import { buildRelayPayment } from '../payments/index.js';
 import * as ed from '@noble/ed25519';
 
 export interface PlenipoClientOptions {
@@ -81,7 +82,7 @@ export class PlenipoClient {
 
     const envelope = {
       type: 'envelope',
-      v: '0.2',
+      v: '0.3',
       envelope_id: envelopeId,
       sender_did: this.did,
       recipient_did: recipientDid,
@@ -93,9 +94,33 @@ export class PlenipoClient {
     const signingInput = buildSigningInput(envelope);
     const signature = await sign(signingInput, this.authSecret);
 
+    const ciphertextBytes = Buffer.from(ciphertext, 'base64url').length;
+    const costTokens = Math.ceil(ciphertextBytes / 1024) || 0;
+    const x402 = buildRelayPayment(this.did, costTokens, envelopeId);
+
     this.sendPhoenix(this.joinRef, String(this.refCounter++), 'relay:inbox', 'message.send', {
-      ...envelope,
-      signature,
+      envelope: { ...envelope, signature },
+      payment: { x402 },
+    });
+  }
+
+  async getBalance(): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const ref = String(this.refCounter++);
+      const handler = (data: Buffer) => {
+        const msg = JSON.parse(data.toString()) as unknown[];
+        if (msg[1] === ref && msg[3] === 'phx_reply') {
+          this.ws?.off('message', handler);
+          const payload = msg[4] as { status: string; response?: { balance: number } };
+          if (payload.status === 'ok' && payload.response) {
+            resolve(payload.response.balance);
+          } else {
+            reject(new Error(JSON.stringify(payload)));
+          }
+        }
+      };
+      this.ws?.on('message', handler);
+      this.sendPhoenix(this.joinRef, ref, 'relay:inbox', 'balance.get', {});
     });
   }
 

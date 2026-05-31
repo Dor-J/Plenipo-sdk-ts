@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { createDidDocument } from '../../did/create.js';
 import { discoverAgents } from '../../discover/index.js';
+import { mandatePrepare, purchaseBundle } from '../../payments/index.js';
 
 /**
  * Registers Plenipo MCP tools.
@@ -65,8 +66,52 @@ export function registerPlenipoTools(server: McpServer): void {
       inputSchema: {},
     },
     async () => ({
-      content: [{ type: 'text', text: 'Use balance.get on an open relay channel.' }],
+      content: [
+        {
+          type: 'text',
+          text: 'Use PlenipoClient.getBalance() after connect(), or balance.get on the channel.',
+        },
+      ],
     }),
+  );
+
+  server.registerTool(
+    'plenipo_purchase_bundle',
+    {
+      description: 'Purchase a token bundle via x402 (HTTP 402 retry)',
+      inputSchema: {
+        agentDid: z.string(),
+        bundleId: z.string(),
+        relayUrl: z.string().default('http://localhost:4000'),
+      },
+    },
+    async ({ agentDid, bundleId, relayUrl }) => {
+      const receipt = await purchaseBundle(relayUrl, agentDid, bundleId);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(receipt, null, 2) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'plenipo_mandate_prepare',
+    {
+      description: 'Prepare unsigned mandate JSON for operator signing',
+      inputSchema: {
+        agentDid: z.string(),
+        operatorDid: z.string(),
+        relayUrl: z.string().default('http://localhost:4000'),
+      },
+    },
+    async ({ agentDid, operatorDid, relayUrl }) => {
+      const result = await mandatePrepare(relayUrl, {
+        agent_did: agentDid,
+        operator_did: operatorDid,
+      });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    },
   );
 
   server.registerTool(
