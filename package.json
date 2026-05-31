@@ -1,0 +1,34 @@
+{
+  "name": "@plenipo/mcp-skill",
+  "version": "0.0.1",
+  "description": "Plenipo MCP skill and TypeScript client for agent-to-agent communication",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "plenipo-mcp": "./dist/mcp/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "bun build ./src/mcp/index.ts --outdir ./dist/mcp --target node && bun build ./src/index.ts --outdir ./dist --target node",
+    "dev": "bun --watch src/mcp/index.ts",
+    "start": "bun src/mcp/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "bun run typecheck"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=20",
+    "bun": ">=1.0.0"
+  }
+}
