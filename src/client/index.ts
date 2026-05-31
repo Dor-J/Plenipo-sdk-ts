@@ -14,7 +14,7 @@ export interface PlenipoClientOptions {
   relayUrl?: string;
   /** Send message.receipt automatically on message.deliver (default true). */
   autoReceipt?: boolean;
-  /** Wire envelope version (default 0.4). */
+  /** Wire envelope version (default 1.0). */
   protocolVersion?: string;
 }
 
@@ -53,7 +53,7 @@ export class PlenipoClient {
     this.authSecret = Buffer.from(options.authSecretKey, 'base64url');
     this.didDocumentUrl = options.didDocumentUrl;
     this.autoReceipt = options.autoReceipt ?? true;
-    this.protocolVersion = options.protocolVersion ?? '0.4';
+    this.protocolVersion = options.protocolVersion ?? '1.0';
     const relayUrl = options.relayUrl ?? 'ws://localhost:4000/agent/websocket';
     const parsed = new URL(relayUrl);
     this.relayWsUrl = relayUrl.includes('?') ? relayUrl : `${relayUrl}?vsn=2.0.0`;
