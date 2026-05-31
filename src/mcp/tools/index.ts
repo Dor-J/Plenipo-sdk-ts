@@ -4,6 +4,7 @@ import { createDidDocument } from '../../did/create.js';
 import { discoverAgents } from '../../discover/index.js';
 import { getDeliveryStatus } from '../../delivery/index.js';
 import { mandatePrepare, purchaseBundle } from '../../payments/index.js';
+import { getMcpRuntime } from '../runtime.js';
 
 /**
  * Registers Plenipo MCP tools.
@@ -17,17 +18,17 @@ export function registerPlenipoTools(server: McpServer): void {
       inputSchema: {
         recipientDid: z.string(),
         message: z.string(),
+        recipientDocumentUrl: z.string().optional(),
         priority: z.enum(['low', 'normal', 'high']).default('normal'),
       },
     },
-    async () => ({
-      content: [
-        {
-          type: 'text',
-          text: 'Use PlenipoClient.send() programmatically; MCP send wiring requires env keys.',
-        },
-      ],
-    }),
+    async ({ recipientDid, message, recipientDocumentUrl }) => {
+      const runtime = getMcpRuntime();
+      const ack = await runtime.send(recipientDid, message, recipientDocumentUrl);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(ack, null, 2) }],
+      };
+    },
   );
 
   server.registerTool(
@@ -39,9 +40,14 @@ export function registerPlenipoTools(server: McpServer): void {
         limit: z.number().int().positive().max(100).default(100),
       },
     },
-    async () => ({
-      content: [{ type: 'text', text: 'Use PlenipoClient.onMessage() after connect().' }],
-    }),
+    async ({ since, limit }) => {
+      const runtime = getMcpRuntime();
+      await runtime.ensureConnected();
+      const messages = runtime.drainMessages(since, limit);
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ messages }, null, 2) }],
+      };
+    },
   );
 
   server.registerTool(
@@ -67,14 +73,13 @@ export function registerPlenipoTools(server: McpServer): void {
       description: 'Check current token balance',
       inputSchema: {},
     },
-    async () => ({
-      content: [
-        {
-          type: 'text',
-          text: 'Use PlenipoClient.getBalance() after connect(), or balance.get on the channel.',
-        },
-      ],
-    }),
+    async () => {
+      const runtime = getMcpRuntime();
+      const balance = await runtime.getBalance();
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ balance }, null, 2) }],
+      };
+    },
   );
 
   server.registerTool(
