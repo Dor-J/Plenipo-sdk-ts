@@ -1,2 +1,1 @@
-/** DID generation and management (scaffold). */
-export {};
+export * from './create.js';

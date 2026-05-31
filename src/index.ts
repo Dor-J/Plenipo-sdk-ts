@@ -1,2 +1,4 @@
-export { PlenipoClient } from './client/index.js';
-export { createPlenipoMcpServer } from './mcp/index.js';
+export * from './client/index.js';
+export * from './crypto/index.js';
+export * from './did/index.js';
+export * from './discover/index.js';

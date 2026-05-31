@@ -1,8 +1,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { createDidDocument } from '../../did/create.js';
+import { discoverAgents } from '../../discover/index.js';
 
 /**
- * Registers Plenipo MCP tools (scaffold — handlers return placeholders).
+ * Registers Plenipo MCP tools.
  */
 export function registerPlenipoTools(server: McpServer): void {
   server.registerTool(
@@ -16,7 +18,12 @@ export function registerPlenipoTools(server: McpServer): void {
       },
     },
     async () => ({
-      content: [{ type: 'text', text: 'Not implemented yet.' }],
+      content: [
+        {
+          type: 'text',
+          text: 'Use PlenipoClient.send() programmatically; MCP send wiring requires env keys.',
+        },
+      ],
     }),
   );
 
@@ -30,7 +37,7 @@ export function registerPlenipoTools(server: McpServer): void {
       },
     },
     async () => ({
-      content: [{ type: 'text', text: 'Not implemented yet.' }],
+      content: [{ type: 'text', text: 'Use PlenipoClient.onMessage() after connect().' }],
     }),
   );
 
@@ -43,9 +50,12 @@ export function registerPlenipoTools(server: McpServer): void {
         capability: z.string().optional(),
       },
     },
-    async () => ({
-      content: [{ type: 'text', text: 'Not implemented yet.' }],
-    }),
+    async ({ query, capability }) => {
+      const results = await discoverAgents({ query, capability });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
+      };
+    },
   );
 
   server.registerTool(
@@ -55,7 +65,7 @@ export function registerPlenipoTools(server: McpServer): void {
       inputSchema: {},
     },
     async () => ({
-      content: [{ type: 'text', text: 'Not implemented yet.' }],
+      content: [{ type: 'text', text: 'Use balance.get on an open relay channel.' }],
     }),
   );
 
@@ -64,11 +74,23 @@ export function registerPlenipoTools(server: McpServer): void {
     {
       description: 'Generate a new DID document and key pair',
       inputSchema: {
-        domain: z.string().optional(),
+        domain: z.string(),
       },
     },
-    async () => ({
-      content: [{ type: 'text', text: 'Not implemented yet.' }],
-    }),
+    async ({ domain }) => {
+      const result = await createDidDocument(domain);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              { did: result.did, document: result.document, privateKeys: result.privateKeys },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    },
   );
 }
