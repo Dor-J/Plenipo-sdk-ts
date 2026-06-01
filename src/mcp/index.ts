@@ -17,15 +17,24 @@ export function createPlenipoMcpServer(): McpServer {
   return server;
 }
 
-async function main(): Promise<void> {
-  const server = createPlenipoMcpServer();
-  const transport = new StdioServerTransport();
+export function createStdioTransport(): StdioServerTransport {
+  return new StdioServerTransport();
+}
+
+export async function main(
+  serverFactory = createPlenipoMcpServer,
+  transportFactory = createStdioTransport,
+): Promise<void> {
+  const server = serverFactory();
+  const transport = transportFactory();
   await server.connect(transport);
 }
 
+export function handleMainError(error: unknown): never {
+  console.error(error);
+  process.exit(1);
+}
+
 if (import.meta.main) {
-  main().catch((error: unknown) => {
-    console.error(error);
-    process.exit(1);
-  });
+  main().catch(handleMainError);
 }

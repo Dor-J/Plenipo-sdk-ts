@@ -16,6 +16,8 @@
     "dev": "bun --watch src/mcp/index.ts",
     "start": "bun src/mcp/index.ts",
     "test": "bun test",
+    "test:coverage": "bun test --coverage",
+    "coverage:critical": "bun run scripts/check-critical-coverage.ts coverage/lcov.info 90",
     "typecheck": "tsc --noEmit",
     "lint": "bun run typecheck"
   },

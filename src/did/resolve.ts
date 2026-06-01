@@ -34,7 +34,7 @@ export async function fetchDidDocument(options: ResolveEncKeyOptions): Promise<R
     });
     const match = results.find((r) => r.did === options.recipientDid);
     if (match?.document_url) {
-      return fetchDidJson(match.document_url, options.recipientDid);
+      return await fetchDidJson(match.document_url, options.recipientDid);
     }
   } catch {
     // Registry optional
@@ -43,7 +43,7 @@ export async function fetchDidDocument(options: ResolveEncKeyOptions): Promise<R
   const webUrl = didWebDocumentUrl(options.recipientDid);
   if (webUrl) {
     try {
-      return fetchDidJson(webUrl, options.recipientDid);
+      return await fetchDidJson(webUrl, options.recipientDid);
     } catch {
       // Fall through to relay
     }
