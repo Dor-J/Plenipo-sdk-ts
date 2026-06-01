@@ -7,6 +7,7 @@ describe('createDidDocument', () => {
     expect(did).toBe('did:web:agent.example.com');
     const vms = document.verificationMethod as Array<{ type: string }>;
     expect(vms).toHaveLength(2);
-    expect((document.service as Array<{ type: string }>)[0].type).toBe('PlenipoAgent');
+    const [service] = document.service as Array<{ type: string }>;
+    expect(service?.type).toBe('PlenipoAgent');
   });
 });

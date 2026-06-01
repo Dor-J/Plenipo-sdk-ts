@@ -1,3 +1,5 @@
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { base58btc } from 'multiformats/bases/base58';
 import { discoverAgents } from '../discover/index.js';
 
@@ -21,7 +23,7 @@ export async function resolveEncPublicKey(options: ResolveEncKeyOptions): Promis
  */
 export async function fetchDidDocument(options: ResolveEncKeyOptions): Promise<Record<string, unknown>> {
   if (options.recipientDocumentUrl) {
-    return fetchJson(options.recipientDocumentUrl);
+    return fetchDidJson(options.recipientDocumentUrl, options.recipientDid);
   }
 
   try {
@@ -32,7 +34,7 @@ export async function fetchDidDocument(options: ResolveEncKeyOptions): Promise<R
     });
     const match = results.find((r) => r.did === options.recipientDid);
     if (match?.document_url) {
-      return fetchJson(match.document_url);
+      return fetchDidJson(match.document_url, options.recipientDid);
     }
   } catch {
     // Registry optional
@@ -41,7 +43,7 @@ export async function fetchDidDocument(options: ResolveEncKeyOptions): Promise<R
   const webUrl = didWebDocumentUrl(options.recipientDid);
   if (webUrl) {
     try {
-      return fetchJson(webUrl);
+      return fetchDidJson(webUrl, options.recipientDid);
     } catch {
       // Fall through to relay
     }
@@ -59,10 +61,20 @@ export function encPublicKeyFromDocument(
   document: Record<string, unknown>,
   did: string,
 ): Uint8Array {
+  if (document.id !== did) {
+    throw new Error(`DID document id mismatch for ${did}`);
+  }
+
   const methods = document.verificationMethod;
   if (!Array.isArray(methods)) {
     throw new Error('DID document missing verificationMethod');
   }
+
+  const keyAgreement = document.keyAgreement;
+  if (!Array.isArray(keyAgreement) || !keyAgreement.every((ref) => typeof ref === 'string')) {
+    throw new Error('DID document missing keyAgreement');
+  }
+  const keyAgreementRefs = keyAgreement as string[];
 
   const encMethod =
     methods.find((m) => {
@@ -70,15 +82,12 @@ export function encPublicKeyFromDocument(
       const vm = m as Record<string, unknown>;
       const id = String(vm.id ?? '');
       const type = String(vm.type ?? '');
+      const controller = vm.controller;
       return (
-        type === 'X25519KeyAgreementKey2020' ||
-        id.endsWith('#enc-key') ||
-        (Array.isArray(document.keyAgreement) &&
-          (document.keyAgreement as string[]).includes(id))
+        keyAgreementRefs.includes(id) &&
+        type === 'X25519KeyAgreementKey2020' &&
+        (controller === undefined || controller === did)
       );
-    }) ?? methods.find((m) => {
-      if (!m || typeof m !== 'object') return false;
-      return String((m as Record<string, unknown>).type ?? '').includes('X25519');
     });
 
   if (!encMethod || typeof encMethod !== 'object') {
@@ -91,6 +100,84 @@ export function encPublicKeyFromDocument(
   }
 
   return decodeMultibaseX25519(multibase);
+}
+
+async function fetchDidJson(url: string, did: string): Promise<Record<string, unknown>> {
+  await validateDocumentUrlForDid(url, did);
+  return fetchJson(url);
+}
+
+async function validateDocumentUrlForDid(url: string, did: string): Promise<void> {
+  const allowUnsafe = process.env.PLENIPO_ALLOW_UNSAFE_DID_FETCH === 'true';
+  const expected = didWebDocumentUrl(did);
+  if (!expected) {
+    throw new Error(`Unsupported DID method for direct document fetch: ${did}`);
+  }
+
+  const parsed = new URL(url);
+  if (!allowUnsafe && parsed.protocol !== 'https:') {
+    throw new Error('DID document URL must use https');
+  }
+
+  if (!allowUnsafe && parsed.toString() !== expected) {
+    throw new Error('DID document URL does not match did:web document URL');
+  }
+
+  if (!allowUnsafe) {
+    await assertPublicHost(parsed.hostname);
+  }
+}
+
+async function assertPublicHost(hostname: string): Promise<void> {
+  const literalKind = isIP(hostname);
+  const addresses =
+    literalKind === 0
+      ? await lookup(hostname, { all: true, verbatim: true })
+      : [{ address: hostname }];
+
+  if (addresses.some(({ address }) => blockedAddress(address))) {
+    throw new Error('DID document URL host resolves to a blocked address');
+  }
+}
+
+function blockedAddress(address: string): boolean {
+  if (address.includes(':')) {
+    return blockedIpv6(address);
+  }
+
+  const parts = address.split('.').map((p) => Number(p));
+  if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) {
+    return true;
+  }
+
+  const [a, b, c] = parts as [number, number, number, number];
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 0 && (c === 0 || c === 2)) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    (a === 198 && b === 51 && c === 100) ||
+    (a === 203 && b === 0 && c === 113) ||
+    a >= 224
+  );
+}
+
+function blockedIpv6(address: string): boolean {
+  const normalized = address.toLowerCase();
+  return (
+    normalized === '::' ||
+    normalized === '::1' ||
+    normalized.startsWith('fe80:') ||
+    normalized.startsWith('fc') ||
+    normalized.startsWith('fd') ||
+    normalized.startsWith('ff') ||
+    normalized.includes('::ffff:')
+  );
 }
 
 function decodeMultibaseX25519(multibase: string): Uint8Array {
@@ -113,7 +200,7 @@ function didWebDocumentUrl(did: string): string | null {
 }
 
 async function fetchJson(url: string): Promise<Record<string, unknown>> {
-  const res = await fetch(url);
+  const res = await fetch(url, { redirect: 'error' });
   if (!res.ok) {
     throw new Error(`Failed to fetch DID document (${res.status}): ${url}`);
   }

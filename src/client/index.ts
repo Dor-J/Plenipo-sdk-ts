@@ -56,8 +56,9 @@ export class PlenipoClient {
     this.protocolVersion = options.protocolVersion ?? '1.0';
     const relayUrl = options.relayUrl ?? 'ws://localhost:4000/agent/websocket';
     const parsed = new URL(relayUrl);
+    ensureAllowedRelayScheme(parsed);
     this.relayWsUrl = relayUrl.includes('?') ? relayUrl : `${relayUrl}?vsn=2.0.0`;
-    this.relayHttpUrl = `http://${parsed.host}`;
+    this.relayHttpUrl = relayHttpOrigin(parsed);
   }
 
   onMessage(handler: MessageHandler): void {
@@ -178,7 +179,7 @@ export class PlenipoClient {
     event: string,
     payload: unknown,
   ): void {
-    const message = ref ? [joinRef, ref, topic, event, payload] : [joinRef, ref, topic, event, payload];
+    const message = [joinRef, ref, topic, event, payload];
     this.ws?.send(JSON.stringify(message));
   }
 
@@ -225,7 +226,40 @@ function generateUlid(): string {
 
 /** Generates a fresh Ed25519 keypair for tests. */
 export async function generateKeypair(): Promise<{ publicKey: Uint8Array; secretKey: Uint8Array }> {
-  const secretKey = ed.utils.randomSecretKey();
+  const secretKey = ed.utils.randomPrivateKey();
   const publicKey = await ed.getPublicKeyAsync(secretKey);
   return { publicKey, secretKey };
+}
+
+function relayHttpOrigin(parsed: URL): string {
+  if (parsed.protocol === 'wss:') {
+    return `https://${parsed.host}`;
+  }
+
+  if (parsed.protocol === 'ws:') {
+    return `http://${parsed.host}`;
+  }
+
+  throw new Error('relayUrl must use ws:// or wss://');
+}
+
+function ensureAllowedRelayScheme(parsed: URL): void {
+  if (parsed.protocol === 'wss:') {
+    return;
+  }
+
+  if (parsed.protocol !== 'ws:') {
+    throw new Error('relayUrl must use ws:// or wss://');
+  }
+
+  if (isLocalRelayHost(parsed.hostname) || process.env.PLENIPO_ALLOW_INSECURE_RELAY === 'true') {
+    return;
+  }
+
+  throw new Error('Insecure ws:// relayUrl is allowed only for localhost or explicit opt-in');
+}
+
+function isLocalRelayHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
 }
