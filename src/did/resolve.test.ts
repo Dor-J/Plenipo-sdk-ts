@@ -175,6 +175,23 @@ describe('did resolve', () => {
     expect(calls[1]).toBe('https://agent.example.com/.well-known/did.json');
   });
 
+  it('uses spec path for path-based did:web fallback', async () => {
+    const { did, document } = await createDidDocument('agents.example.com', {
+      pathSegments: ['local', 'typescript-b'],
+    });
+    const calls: string[] = [];
+    process.env.PLENIPO_ALLOW_UNSAFE_DID_FETCH = 'true';
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes('/api/v1/search')) return new Response('', { status: 503 });
+      return new Response(JSON.stringify(document), { status: 200 });
+    }) as typeof fetch;
+
+    await expect(fetchDidDocument({ recipientDid: did })).resolves.toEqual(document);
+    expect(calls[1]).toBe('https://agents.example.com/local/typescript-b/did.json');
+  });
+
   it('falls back to relay resolver when registry and did:web fail', async () => {
     globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
       const url = String(input);

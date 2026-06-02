@@ -54,6 +54,7 @@ Thumbs.db
 # MCP / local agent config (may contain keys)
 mcp.json.local
 claude_desktop_config.local.json
+.plenipo-local/
 
 # Agents
 .claude/

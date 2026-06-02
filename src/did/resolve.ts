@@ -193,10 +193,15 @@ function decodeMultibaseX25519(multibase: string): Uint8Array {
 
 function didWebDocumentUrl(did: string): string | null {
   if (!did.startsWith('did:web:')) return null;
-  const path = did.slice('did:web:'.length).split(':').join('/');
-  const host = path.split('/')[0];
-  const rest = path.includes('/') ? `/${path.split('/').slice(1).join('/')}` : '';
-  return `https://${host}${rest}/.well-known/did.json`;
+  const [host, ...pathSegments] = did.slice('did:web:'.length).split(':');
+  if (!host || pathSegments.some((segment) => !segment)) return null;
+
+  if (pathSegments.length === 0) {
+    return `https://${decodeURIComponent(host)}/.well-known/did.json`;
+  }
+
+  const path = pathSegments.map((segment) => encodeURIComponent(decodeURIComponent(segment))).join('/');
+  return `https://${decodeURIComponent(host)}/${path}/did.json`;
 }
 
 async function fetchJson(url: string): Promise<Record<string, unknown>> {

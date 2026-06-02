@@ -3,11 +3,18 @@ import { base58btc } from 'multiformats/bases/base58';
 
 export interface DidCreateResult {
   did: string;
+  documentUrl: string;
   document: Record<string, unknown>;
   privateKeys: {
     authSecretKey: string;
     encSecretKey: string;
   };
+}
+
+export interface DidCreateOptions {
+  relayUrl?: string;
+  pathSegments?: string[];
+  capabilities?: string[];
 }
 
 function multibaseEd25519(publicKey: Uint8Array): string {
@@ -25,15 +32,21 @@ function multibaseX25519(publicKey: Uint8Array): string {
  */
 export async function createDidDocument(
   domain: string,
-  relayUrl = 'ws://localhost:4000/agent/websocket',
+  optionsOrRelayUrl: DidCreateOptions | string = {},
 ): Promise<DidCreateResult> {
+  const options =
+    typeof optionsOrRelayUrl === 'string' ? { relayUrl: optionsOrRelayUrl } : optionsOrRelayUrl;
+  const relayUrl = options.relayUrl ?? 'ws://localhost:4000/agent/websocket';
+  const pathSegments = options.pathSegments ?? [];
+  const capabilities = options.capabilities ?? ['general'];
   const authPair = nacl.sign.keyPair();
   const authPublic = authPair.publicKey;
-  const authSecret = authPair.secretKey;
+  const authSeed = authPair.secretKey.slice(0, 32);
   const encPair = nacl.box.keyPair();
   const encPublic = encPair.publicKey;
   const encSecret = encPair.secretKey;
-  const did = `did:web:${domain}`;
+  const did = buildDidWeb(domain, pathSegments);
+  const documentUrl = buildDocumentUrl(domain, pathSegments);
 
   const document = {
     '@context': [
@@ -64,17 +77,32 @@ export async function createDidDocument(
         id: `${did}#plenipo`,
         type: 'PlenipoAgent',
         serviceEndpoint: relayUrl,
-        capabilities: ['general'],
+        capabilities,
       },
     ],
   };
 
   return {
     did,
+    documentUrl,
     document,
     privateKeys: {
-      authSecretKey: Buffer.from(authSecret).toString('base64url'),
+      authSecretKey: Buffer.from(authSeed).toString('base64url'),
       encSecretKey: Buffer.from(encSecret).toString('base64url'),
     },
   };
+}
+
+function buildDidWeb(domain: string, pathSegments: string[]): string {
+  const path = pathSegments.map((segment) => encodeURIComponent(segment));
+  return ['did:web', domain, ...path].join(':');
+}
+
+function buildDocumentUrl(domain: string, pathSegments: string[]): string {
+  if (pathSegments.length === 0) {
+    return `https://${domain}/.well-known/did.json`;
+  }
+
+  const path = pathSegments.map((segment) => encodeURIComponent(segment)).join('/');
+  return `https://${domain}/${path}/did.json`;
 }
