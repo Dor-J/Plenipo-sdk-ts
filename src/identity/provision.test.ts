@@ -93,6 +93,11 @@ describe('identity provision', () => {
       capabilities: ['general'],
       createdAt: '2026-01-01T00:00:00.000Z',
       document: { id: 'did:web:env.local' },
+      didDocumentMode: 'external' as const,
+      coreRegistered: true,
+      registrationPending: false,
+      lastRegistrationError: null,
+      documentFingerprint: null,
     };
     const config = identityToMcpConfig(identity);
     expect(config.did).toBe(identity.did);

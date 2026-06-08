@@ -1,6 +1,7 @@
 import { documentFingerprint } from './registerSigning.js';
 import { registerDocument } from './register.js';
 import { saveIdentity, type AgentIdentity } from './store.js';
+import { syncWarningsFromError } from './syncErrors.js';
 
 export interface SyncIdentityResult {
   ok: boolean;
@@ -52,7 +53,7 @@ export async function syncIdentityWithCore(
       documentFingerprint: fingerprint,
     };
     saveIdentity(pending);
-    warnings.push('Core unavailable');
+    warnings.push(...syncWarningsFromError(error));
     return [
       pending,
       {

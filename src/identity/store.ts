@@ -39,6 +39,10 @@ export function loadIdentity(path = identityPath()): AgentIdentity | null {
   }
 
   const raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+  const rawMode = String(raw.did_document_mode ?? 'core_hosted');
+  const didDocumentMode: DidDocumentMode =
+    rawMode === 'core_hosted' || rawMode === 'external' ? rawMode : 'core_hosted';
+
   return {
     did: String(raw.did),
     authSecretB64: String(raw.auth_secret_b64),
@@ -50,7 +54,7 @@ export function loadIdentity(path = identityPath()): AgentIdentity | null {
     capabilities: Array.isArray(raw.capabilities) ? raw.capabilities.map(String) : [],
     createdAt: String(raw.created_at ?? ''),
     document: (raw.document as Record<string, unknown>) ?? {},
-    didDocumentMode: (raw.did_document_mode as DidDocumentMode) ?? 'core_hosted',
+    didDocumentMode,
     coreRegistered: raw.core_registered !== undefined ? Boolean(raw.core_registered) : true,
     registrationPending: Boolean(raw.registration_pending ?? false),
     lastRegistrationError:

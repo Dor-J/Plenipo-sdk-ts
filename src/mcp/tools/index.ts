@@ -230,6 +230,8 @@ export function registerPlenipoTools(server: McpServer): void {
               {
                 did: updated.did,
                 capabilities: updated.capabilities,
+                coreRegistered: updated.coreRegistered,
+                registrationPending: updated.registrationPending,
               },
               null,
               2,
