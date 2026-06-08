@@ -21,10 +21,17 @@ export function createStdioTransport(): StdioServerTransport {
   return new StdioServerTransport();
 }
 
+export async function bootstrapMcpRuntime(): Promise<void> {
+  const { McpRuntime, loadMcpConfig, setMcpRuntime } = await import('./runtime.js');
+  const config = await loadMcpConfig();
+  setMcpRuntime(new McpRuntime(config));
+}
+
 export async function main(
   serverFactory = createPlenipoMcpServer,
   transportFactory = createStdioTransport,
 ): Promise<void> {
+  await bootstrapMcpRuntime();
   const server = serverFactory();
   const transport = transportFactory();
   await server.connect(transport);

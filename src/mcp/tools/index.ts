@@ -4,6 +4,9 @@ import { createDidDocument } from '../../did/create.js';
 import { discoverAgents } from '../../discover/index.js';
 import { getDeliveryStatus } from '../../delivery/index.js';
 import { mandatePrepare, purchaseBundle } from '../../payments/index.js';
+import { declareCapabilities } from '../../identity/capabilities.js';
+import { ensureIdentity } from '../../identity/provision.js';
+import { syncIdentityWithCore, syncResultToDict } from '../../identity/sync.js';
 import { getMcpRuntime } from '../runtime.js';
 
 /**
@@ -134,6 +137,105 @@ export function registerPlenipoTools(server: McpServer): void {
       const status = await getDeliveryStatus(relayUrl, envelopeId);
       return {
         content: [{ type: 'text', text: JSON.stringify(status, null, 2) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'plenipo_identity',
+    {
+      description: 'Show the current local agent identity',
+      inputSchema: {},
+    },
+    async () => {
+      const identity = await ensureIdentity();
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                did: identity.did,
+                didDocumentUrl: identity.didDocumentUrl,
+                didDocumentMode: identity.didDocumentMode,
+                coreRegistered: identity.coreRegistered,
+                registrationPending: identity.registrationPending,
+                capabilities: identity.capabilities,
+                relayUrl: identity.relayUrl,
+                registryUrl: identity.registryUrl,
+                coreUrl: identity.coreUrl,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    'plenipo_sync_identity',
+    {
+      description: 'Register or retry Core sync for the local agent identity',
+      inputSchema: {},
+    },
+    async () => {
+      const identity = await ensureIdentity();
+      if (identity.didDocumentMode !== 'core_hosted') {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                syncResultToDict({
+                  ok: true,
+                  did: identity.did,
+                  coreRegistered: identity.coreRegistered,
+                  registrationPending: false,
+                  documentFingerprint: identity.documentFingerprint,
+                  warnings: ['External identity; Core sync not required'],
+                }),
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+
+      const [, result] = await syncIdentityWithCore(identity);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(syncResultToDict(result), null, 2) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'plenipo_declare_capabilities',
+    {
+      description: 'Declare or update agent capabilities in Core-hosted DID',
+      inputSchema: {
+        capabilities: z.array(z.string()).min(1),
+        replace: z.boolean().default(false),
+      },
+    },
+    async ({ capabilities, replace }) => {
+      const updated = await declareCapabilities(capabilities, { replace });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                did: updated.did,
+                capabilities: updated.capabilities,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
       };
     },
   );

@@ -32,6 +32,9 @@ describe('createPlenipoMcpServer', () => {
       'plenipo_purchase_bundle',
       'plenipo_mandate_prepare',
       'plenipo_delivery_status',
+      'plenipo_identity',
+      'plenipo_sync_identity',
+      'plenipo_declare_capabilities',
       'plenipo_did_create',
     ]);
 

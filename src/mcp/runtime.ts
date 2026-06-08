@@ -2,6 +2,8 @@ import { PlenipoClient } from '../client/index.js';
 import { decodeBase64Url } from '../crypto/base64url.js';
 import { openSealed } from '../crypto/sealedBox.js';
 import { resolveEncPublicKey } from '../did/resolve.js';
+import { identityToMcpConfig } from '../identity/provision.js';
+import { loadIdentity } from '../identity/store.js';
 import type { SendAck } from '../client/index.js';
 
 export interface McpRuntimeConfig {
@@ -35,20 +37,32 @@ export function loadMcpConfigFromEnv(): McpRuntimeConfig {
   const didDocumentUrl = process.env.PLENIPO_DID_DOCUMENT_URL;
   const relayUrl = process.env.PLENIPO_RELAY_URL ?? 'ws://localhost:4000/agent/websocket';
 
-  if (!did || !authSecretB64 || !didDocumentUrl) {
-    throw new Error(
-      'Missing MCP env: set PLENIPO_DID, PLENIPO_AUTH_SECRET_B64 (or PLENIPO_DID_PRIVATE_KEY), PLENIPO_DID_DOCUMENT_URL',
-    );
+  if (did && authSecretB64 && didDocumentUrl) {
+    return {
+      did,
+      authSecretB64,
+      didDocumentUrl,
+      relayUrl,
+      encSecretB64: process.env.PLENIPO_ENC_SECRET_B64,
+      registryUrl: process.env.PLENIPO_REGISTRY_URL,
+    };
   }
 
-  return {
-    did,
-    authSecretB64,
-    didDocumentUrl,
-    relayUrl,
-    encSecretB64: process.env.PLENIPO_ENC_SECRET_B64,
-    registryUrl: process.env.PLENIPO_REGISTRY_URL,
-  };
+  const stored = loadIdentity();
+  if (stored) {
+    return identityToMcpConfig(stored);
+  }
+
+  throw new Error(
+    'Missing MCP identity: set PLENIPO_DID, PLENIPO_AUTH_SECRET_B64, PLENIPO_DID_DOCUMENT_URL or run ensureIdentity() before connecting',
+  );
+}
+
+/** Loads MCP config from env, identity.json, or auto-provision. */
+export async function loadMcpConfig(): Promise<McpRuntimeConfig> {
+  const { ensureIdentity, identityToMcpConfig } = await import('../identity/provision.js');
+  const identity = await ensureIdentity();
+  return identityToMcpConfig(identity);
 }
 
 /**
@@ -168,6 +182,11 @@ export function getMcpRuntime(): McpRuntime {
     defaultRuntime = new McpRuntime(loadMcpConfigFromEnv());
   }
   return defaultRuntime;
+}
+
+/** Sets the process-wide MCP runtime. */
+export function setMcpRuntime(runtime: McpRuntime): void {
+  defaultRuntime = runtime;
 }
 
 /** Resets runtime (for tests). */

@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { PlenipoClient } from '../client/index.js';
 import { createDidDocument } from '../did/create.js';
+import { identityFromCreateResult, saveIdentity } from '../identity/store.js';
 import {
   McpRuntime,
   getMcpRuntime,
@@ -54,14 +58,57 @@ describe('McpRuntime', () => {
     restoreEnv(previous);
   });
 
-  it('loadMcpConfigFromEnv rejects missing required env', () => {
+  it('loadMcpConfigFromEnv reads identity file when env is missing', () => {
     const previous = captureEnv();
+    const previousHome = process.env.PLENIPO_HOME;
+    const tempHome = mkdtempSync(join(tmpdir(), 'plenipo-runtime-'));
+    process.env.PLENIPO_HOME = tempHome;
     delete process.env.PLENIPO_DID;
     delete process.env.PLENIPO_AUTH_SECRET_B64;
     delete process.env.PLENIPO_DID_PRIVATE_KEY;
     delete process.env.PLENIPO_DID_DOCUMENT_URL;
 
-    expect(() => loadMcpConfigFromEnv()).toThrow(/Missing MCP env/);
+    saveIdentity(
+      identityFromCreateResult({
+        did: 'did:web:localhost:agents:runtime',
+        authSecretB64: 'AUTH',
+        encSecretB64: 'ENC',
+        didDocumentUrl: 'https://localhost/agents/runtime/did.json',
+        document: { id: 'did:web:localhost:agents:runtime', service: [] },
+        relayUrl: 'ws://localhost:4000/agent/websocket',
+        registryUrl: 'http://localhost:4001',
+        coreUrl: 'http://localhost:4000',
+      }),
+    );
+
+    const config = loadMcpConfigFromEnv();
+    expect(config.did).toBe('did:web:localhost:agents:runtime');
+    rmSync(tempHome, { recursive: true, force: true });
+    if (previousHome === undefined) {
+      delete process.env.PLENIPO_HOME;
+    } else {
+      process.env.PLENIPO_HOME = previousHome;
+    }
+    restoreEnv(previous);
+  });
+
+  it('loadMcpConfigFromEnv rejects missing identity', () => {
+    const previous = captureEnv();
+    const previousHome = process.env.PLENIPO_HOME;
+    const tempHome = mkdtempSync(join(tmpdir(), 'plenipo-runtime-missing-'));
+    process.env.PLENIPO_HOME = tempHome;
+    delete process.env.PLENIPO_DID;
+    delete process.env.PLENIPO_AUTH_SECRET_B64;
+    delete process.env.PLENIPO_DID_PRIVATE_KEY;
+    delete process.env.PLENIPO_DID_DOCUMENT_URL;
+
+    expect(() => loadMcpConfigFromEnv()).toThrow(/Missing MCP identity/);
+    rmSync(tempHome, { recursive: true, force: true });
+    if (previousHome === undefined) {
+      delete process.env.PLENIPO_HOME;
+    } else {
+      process.env.PLENIPO_HOME = previousHome;
+    }
     restoreEnv(previous);
   });
 
