@@ -5,6 +5,7 @@ import { discoverAgents } from '../../discover/index.js';
 import { getDeliveryStatus } from '../../delivery/index.js';
 import { mandatePrepare, purchaseBundle } from '../../payments/index.js';
 import { declareCapabilities } from '../../identity/capabilities.js';
+import { declareRoute, routeFromDocument } from '../../identity/route.js';
 import { ensureIdentity } from '../../identity/provision.js';
 import { syncIdentityWithCore, syncResultToDict } from '../../identity/sync.js';
 import { getMcpRuntime } from '../runtime.js';
@@ -56,14 +57,27 @@ export function registerPlenipoTools(server: McpServer): void {
   server.registerTool(
     'plenipo_discover',
     {
-      description: 'Search the DID registry for agents',
+      description: 'Search the DID registry for Route Records',
       inputSchema: {
         query: z.string().optional(),
         capability: z.string().optional(),
+        protocol: z.string().optional(),
+        paymentScheme: z.string().optional(),
+        maxPricePerKbTokens: z.number().int().optional(),
+        online: z.boolean().optional(),
+        limit: z.number().int().positive().max(100).default(20),
       },
     },
-    async ({ query, capability }) => {
-      const results = await discoverAgents({ query, capability });
+    async ({ query, capability, protocol, paymentScheme, maxPricePerKbTokens, online, limit }) => {
+      const results = await discoverAgents({
+        query,
+        capability,
+        protocol,
+        paymentScheme,
+        maxPricePerKbTokens,
+        online,
+        limit,
+      });
       return {
         content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
       };
@@ -149,6 +163,7 @@ export function registerPlenipoTools(server: McpServer): void {
     },
     async () => {
       const identity = await ensureIdentity();
+      const route = routeFromDocument(identity.document);
       return {
         content: [
           {
@@ -164,6 +179,16 @@ export function registerPlenipoTools(server: McpServer): void {
                 relayUrl: identity.relayUrl,
                 registryUrl: identity.registryUrl,
                 coreUrl: identity.coreUrl,
+                route: {
+                  protocols: route.protocols,
+                  capabilities: route.capabilities,
+                  encryption: {
+                    alg: route.encryption.alg,
+                    public_key_ref: route.encryption.publicKeyRef,
+                  },
+                  payment: route.payment,
+                  limits: route.limits,
+                },
               },
               null,
               2,
@@ -207,6 +232,55 @@ export function registerPlenipoTools(server: McpServer): void {
       const [, result] = await syncIdentityWithCore(identity);
       return {
         content: [{ type: 'text', text: JSON.stringify(syncResultToDict(result), null, 2) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    'plenipo_declare_route',
+    {
+      description: 'Declare or update agent Route Record metadata in Core-hosted DID',
+      inputSchema: {
+        protocols: z.array(z.string()).optional(),
+        capabilities: z.array(z.string()).optional(),
+        payment: z
+          .object({
+            model: z.string().optional(),
+            price_per_kb_tokens: z.number().int().optional(),
+            accepted_schemes: z.array(z.string()).optional(),
+          })
+          .optional(),
+        limits: z
+          .object({
+            max_message_kb: z.number().int().optional(),
+            offline_queue_ttl_seconds: z.number().int().optional(),
+          })
+          .optional(),
+        replace: z.boolean().default(false),
+      },
+    },
+    async ({ protocols, capabilities, payment, limits, replace }) => {
+      const updated = await declareRoute(
+        { protocols, capabilities, payment, limits },
+        { replace },
+      );
+      const route = routeFromDocument(updated.document);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                did: updated.did,
+                route,
+                coreRegistered: updated.coreRegistered,
+                registrationPending: updated.registrationPending,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
       };
     },
   );

@@ -4,6 +4,26 @@ import { base58btc } from 'multiformats/bases/base58';
 import { createDidDocument } from './create.js';
 
 describe('createDidDocument', () => {
+  test('includes default Route Record metadata on PlenipoAgent service', async () => {
+    const { document } = await createDidDocument('agent.example.com');
+    const [service] = document.service as Array<Record<string, unknown>>;
+    expect(service?.type).toBe('PlenipoAgent');
+    expect(service?.protocols).toEqual(['plenipo.message.v1']);
+    expect(service?.payment).toEqual({
+      model: 'per_kb',
+      price_per_kb_tokens: 1,
+      accepted_schemes: ['plenipo-dev-token'],
+    });
+    expect(service?.limits).toEqual({
+      max_message_kb: 256,
+      offline_queue_ttl_seconds: 86400,
+    });
+    expect(service?.encryption).toEqual({
+      alg: 'x25519-xsalsa20poly1305',
+      publicKeyRef: '#enc-key',
+    });
+  });
+
   test('builds did:web with two verification methods', async () => {
     const { did, document } = await createDidDocument('agent.example.com');
     expect(did).toBe('did:web:agent.example.com');

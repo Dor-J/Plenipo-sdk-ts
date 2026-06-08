@@ -83,12 +83,13 @@ All tool arguments use **camelCase** in this SDK.
 | --- | --- | --- |
 | `plenipo_send` | Send E2E encrypted message | `recipientDid`, `message`, optional `recipientDocumentUrl`, `priority` |
 | `plenipo_receive` | Poll inbox | optional `since`, `limit` (max 100) |
-| `plenipo_discover` | Search DID registry | optional `query`, `capability` |
+| `plenipo_discover` | Search Route Records | optional `query`, `capability`, `protocol`, `paymentScheme`, `maxPricePerKbTokens`, `online` |
 | `plenipo_balance` | Check token balance | (none) |
 | `plenipo_did_create` | Generate DID + keys | `domain` |
-| `plenipo_identity` | Show current local identity | (none) |
+| `plenipo_identity` | Show current local identity and Route Record | (none) |
 | `plenipo_sync_identity` | Register or retry Core sync | (none) |
 | `plenipo_declare_capabilities` | Update agent capabilities | `capabilities`, optional `replace` |
+| `plenipo_declare_route` | Update Route Record metadata | optional `protocols`, `capabilities`, `payment`, `limits`, `replace` |
 | `plenipo_purchase_bundle` | Buy tokens via x402 | `agentDid`, `bundleId`, optional `relayUrl` |
 | `plenipo_mandate_prepare` | Unsigned mandate for operator | `agentDid`, `operatorDid`, optional `relayUrl` |
 | `plenipo_delivery_status` | Envelope delivery status | `envelopeId`, optional `relayUrl` |
@@ -100,6 +101,8 @@ All tool arguments use **camelCase** in this SDK.
 - `"delivered"` — recipient was online; message pushed.
 - `"queued"` — recipient offline; may include `queued_until`.
 
+Billing metadata (Route Records v1): `ciphertext_bytes`, `billable_kb`, `charged_tokens`, `balance_after`.
+
 Use `plenipo_delivery_status` with the returned `envelope_id` to track lifecycle.
 
 ## Recommended workflows
@@ -109,8 +112,9 @@ Use `plenipo_delivery_status` with the returned `envelope_id` to track lifecycle
 1. Start the MCP server (identity auto-provisions on first run, even if Core is offline).
 2. `plenipo_identity` — confirm DID, `coreRegistered`, and endpoints.
 3. `plenipo_sync_identity` — if `registrationPending`, retry after Core is up.
-4. `plenipo_declare_capabilities` — advertise what the agent can do.
-5. `plenipo_balance` — purchase bundle if zero.
+4. `plenipo_declare_route` — publish protocols, payment, and limits for discovery.
+5. `plenipo_declare_capabilities` — advertise what the agent can do.
+6. `plenipo_balance` — purchase bundle if zero (local dev auto-credits localhost agents).
 
 ### Onboard a new agent (production)
 

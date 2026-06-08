@@ -25,6 +25,11 @@ export interface BufferedMessage {
   plaintext?: string;
   received_at?: string;
   receivedAt: string;
+  ciphertext_bytes?: number;
+  billable_kb?: number;
+  charged_tokens?: number;
+  balance_after?: number;
+  delivered_at?: string;
 }
 
 /**
@@ -114,8 +119,15 @@ export class McpRuntime {
         this.buffer.push({
           kind: 'receipt',
           envelope_id: payload.envelope_id,
+          sender_did: payload.sender_did,
+          recipient_did: payload.recipient_did,
           received_at: payload.received_at,
           receivedAt: new Date().toISOString(),
+          ciphertext_bytes: payload.ciphertext_bytes,
+          billable_kb: payload.billable_kb,
+          charged_tokens: payload.charged_tokens,
+          balance_after: payload.balance_after,
+          delivered_at: payload.delivered_at,
         });
       });
     }

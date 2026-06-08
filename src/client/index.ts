@@ -26,10 +26,26 @@ export interface SendAck {
   envelope_id: string;
   status: SendAckStatus;
   queued_until?: string;
+  bytes?: number;
+  balance?: number;
+  ciphertext_bytes?: number;
+  billable_kb?: number;
+  charged_tokens?: number;
+  balance_after?: number;
 }
 
 type MessageHandler = (envelope: Record<string, string>) => void;
-type ReceiptHandler = (payload: { envelope_id: string; received_at?: string }) => void;
+type ReceiptHandler = (payload: {
+  envelope_id: string;
+  received_at?: string;
+  sender_did?: string;
+  recipient_did?: string;
+  ciphertext_bytes?: number;
+  billable_kb?: number;
+  charged_tokens?: number;
+  balance_after?: number;
+  delivered_at?: string;
+}) => void;
 
 /**
  * Programmatic client for the Plenipo relay.

@@ -1,3 +1,4 @@
+import { defaultRouteServiceFields } from '../identity/route.js';
 import nacl from 'tweetnacl';
 import { base58btc } from 'multiformats/bases/base58';
 
@@ -38,7 +39,8 @@ export async function createDidDocument(
     typeof optionsOrRelayUrl === 'string' ? { relayUrl: optionsOrRelayUrl } : optionsOrRelayUrl;
   const relayUrl = options.relayUrl ?? 'ws://localhost:4000/agent/websocket';
   const pathSegments = options.pathSegments ?? [];
-  const capabilities = options.capabilities ?? ['general'];
+  const capabilities = options.capabilities ?? ['general', 'mcp'];
+  const routeDefaults = defaultRouteServiceFields();
   const authPair = nacl.sign.keyPair();
   const authPublic = authPair.publicKey;
   const authSeed = authPair.secretKey.slice(0, 32);
@@ -78,6 +80,10 @@ export async function createDidDocument(
         type: 'PlenipoAgent',
         serviceEndpoint: relayUrl,
         capabilities,
+        protocols: routeDefaults.protocols,
+        encryption: routeDefaults.encryption,
+        payment: routeDefaults.payment,
+        limits: routeDefaults.limits,
       },
     ],
   };

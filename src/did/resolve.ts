@@ -23,7 +23,7 @@ export async function resolveEncPublicKey(options: ResolveEncKeyOptions): Promis
  */
 export async function fetchDidDocument(options: ResolveEncKeyOptions): Promise<Record<string, unknown>> {
   if (options.recipientDocumentUrl) {
-    return fetchDidJson(options.recipientDocumentUrl, options.recipientDid);
+    return fetchDidJson(options.recipientDocumentUrl, options.recipientDid, options.relayHttpUrl);
   }
 
   try {
@@ -34,7 +34,7 @@ export async function fetchDidDocument(options: ResolveEncKeyOptions): Promise<R
     });
     const match = results.find((r) => r.did === options.recipientDid);
     if (match?.document_url) {
-      return await fetchDidJson(match.document_url, options.recipientDid);
+      return await fetchDidJson(match.document_url, options.recipientDid, options.relayHttpUrl);
     }
   } catch {
     // Registry optional
@@ -43,7 +43,7 @@ export async function fetchDidDocument(options: ResolveEncKeyOptions): Promise<R
   const webUrl = didWebDocumentUrl(options.recipientDid);
   if (webUrl) {
     try {
-      return await fetchDidJson(webUrl, options.recipientDid);
+      return await fetchDidJson(webUrl, options.recipientDid, options.relayHttpUrl);
     } catch {
       // Fall through to relay
     }
@@ -51,7 +51,7 @@ export async function fetchDidDocument(options: ResolveEncKeyOptions): Promise<R
 
   const relayBase = options.relayHttpUrl ?? process.env.PLENIPO_RELAY_HTTP_URL ?? 'http://localhost:4000';
   const encodedDid = encodeURIComponent(options.recipientDid);
-  return fetchJson(`${relayBase}/v1/dids/${encodedDid}`);
+  return fetchJson(`${relayBase.replace(/\/$/, '')}/v1/dids?did=${encodedDid}`);
 }
 
 /**
@@ -102,30 +102,42 @@ export function encPublicKeyFromDocument(
   return decodeMultibaseX25519(multibase);
 }
 
-async function fetchDidJson(url: string, did: string): Promise<Record<string, unknown>> {
-  await validateDocumentUrlForDid(url, did);
+async function fetchDidJson(url: string, did: string, relayHttpUrl?: string): Promise<Record<string, unknown>> {
+  await validateDocumentUrlForDid(url, did, relayHttpUrl);
   return fetchJson(url);
 }
 
-async function validateDocumentUrlForDid(url: string, did: string): Promise<void> {
+async function validateDocumentUrlForDid(
+  url: string,
+  did: string,
+  relayHttpUrl = 'http://localhost:4000',
+): Promise<void> {
   const allowUnsafe = process.env.PLENIPO_ALLOW_UNSAFE_DID_FETCH === 'true';
+  const coreHosted = isCoreHostedDocumentUrl(url, did, relayHttpUrl);
   const expected = didWebDocumentUrl(did);
-  if (!expected) {
+  if (!expected && !coreHosted) {
     throw new Error(`Unsupported DID method for direct document fetch: ${did}`);
   }
 
   const parsed = new URL(url);
-  if (!allowUnsafe && parsed.protocol !== 'https:') {
+  if (!allowUnsafe && parsed.protocol !== 'https:' && !coreHosted) {
     throw new Error('DID document URL must use https');
   }
 
-  if (!allowUnsafe && parsed.toString() !== expected) {
+  if (!allowUnsafe && !coreHosted && parsed.toString() !== expected) {
     throw new Error('DID document URL does not match did:web document URL');
   }
 
-  if (!allowUnsafe) {
+  if (!allowUnsafe && !coreHosted) {
     await assertPublicHost(parsed.hostname);
   }
+}
+
+function isCoreHostedDocumentUrl(url: string, did: string, relayHttpUrl: string): boolean {
+  if (!did.startsWith('did:web:localhost:agents:')) return false;
+  const base = relayHttpUrl.replace(/\/$/, '');
+  const expected = `${base}/v1/dids?did=${encodeURIComponent(did)}`;
+  return url === expected || url.startsWith(`${base}/v1/dids/`);
 }
 
 async function assertPublicHost(hostname: string): Promise<void> {
