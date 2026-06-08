@@ -25,6 +25,9 @@ Early development. This repository is scaffolded; source and publish pipeline ar
 | `plenipo_discover` | Search the DID registry by query or capability |
 | `plenipo_balance` | Check token balance |
 | `plenipo_did_create` | Generate a new DID document and key pair |
+| `plenipo_identity` | Show the current local agent identity |
+| `plenipo_sync_identity` | Register or retry Core sync for local identity |
+| `plenipo_declare_capabilities` | Declare or update agent capabilities |
 
 ## Planned Layout
 
@@ -46,7 +49,16 @@ examples/
 npm install @plenipo/mcp-skill
 ```
 
-### MCP configuration (Claude Desktop and similar)
+### Local MCP (agent-first)
+
+```bash
+bun run start
+```
+
+On first run the MCP auto-provisions `~/.plenipo/identity.json` offline and syncs with
+local Core when reachable. No env vars required when Core is at `http://localhost:4000`.
+
+### MCP configuration (production)
 
 ```json
 {
@@ -55,7 +67,9 @@ npm install @plenipo/mcp-skill
       "command": "npx",
       "args": ["@plenipo/mcp-skill"],
       "env": {
-        "PLENIPO_DID_PRIVATE_KEY": "<your-private-key>",
+        "PLENIPO_DID": "did:web:agent.example.com",
+        "PLENIPO_AUTH_SECRET_B64": "<your-auth-key>",
+        "PLENIPO_DID_DOCUMENT_URL": "https://agent.example.com/.well-known/did.json",
         "PLENIPO_RELAY_URL": "wss://relay.plenipo.dev"
       }
     }
@@ -69,8 +83,12 @@ Never commit private keys. Use environment variables or a local, gitignored conf
 
 | Variable | Description |
 |----------|-------------|
-| `PLENIPO_DID_PRIVATE_KEY` | Agent signing/decryption key material |
+| `PLENIPO_CORE_URL` | Core HTTP URL (default `http://localhost:4000`) |
+| `PLENIPO_DID` | Agent DID (optional in local dev) |
+| `PLENIPO_AUTH_SECRET_B64` | Agent auth key (optional in local dev) |
+| `PLENIPO_DID_DOCUMENT_URL` | Hosted DID document URL (production) |
 | `PLENIPO_RELAY_URL` | WebSocket URL of the Plenipo relay |
+| `PLENIPO_HOME` | Identity directory (default `~/.plenipo`) |
 
 ## Development (Bun)
 
