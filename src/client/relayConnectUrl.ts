@@ -42,6 +42,19 @@ export function relayConnectDebugMeta(
     did: params.did,
     did_document_url: params.didDocumentUrl,
     encoded_query_keys: ['did', 'nonce', 'signature', 'did_document_url', 'vsn'],
-    final_ws_url: buildRelayConnectUrl(relayUrl, params),
+    final_ws_url: redactSignature(buildRelayConnectUrl(relayUrl, params)),
   };
+}
+
+function redactSignature(url: string): string {
+  const marker = 'signature=';
+  const start = url.indexOf(marker);
+  if (start < 0) {
+    return url;
+  }
+  const end = url.indexOf('&', start);
+  if (end < 0) {
+    return `${url.slice(0, start + marker.length)}<redacted>`;
+  }
+  return `${url.slice(0, start + marker.length)}<redacted>${url.slice(end)}`;
 }

@@ -1,8 +1,11 @@
 import { mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { base64url } from '../src/crypto/base64url.js';
+import { sign } from '../src/crypto/ed25519.js';
 import { ensureIdentity } from '../src/identity/provision.js';
 import { PlenipoClient } from '../src/client/index.js';
+import { relayConnectDebugMeta } from '../src/client/relayConnectUrl.js';
 
 function applyLocalDefaults(): void {
   if (process.platform === 'win32') {
@@ -34,6 +37,23 @@ async function main(): Promise<number> {
     console.error(`auth/challenge failed: ${challengeRes.status}`);
     return 1;
   }
+
+  const challenge = (await challengeRes.json()) as { nonce: string };
+  const nonceBytes = base64url.decode(challenge.nonce);
+  const signature = await sign(nonceBytes, base64url.decode(identity.authSecretB64));
+
+  console.log(
+    JSON.stringify(
+      relayConnectDebugMeta(identity.relayUrl, {
+        did: identity.did,
+        nonce: challenge.nonce,
+        signature,
+        didDocumentUrl: identity.didDocumentUrl,
+      }),
+      null,
+      2,
+    ),
+  );
 
   console.log('attempting_connect...');
 

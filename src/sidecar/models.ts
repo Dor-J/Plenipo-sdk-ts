@@ -9,7 +9,7 @@ import type {
   MessageEvent,
 } from '../runtime/events.js';
 
-export const SIDECAR_VERSION = '0.3.0';
+export const SIDECAR_VERSION = '0.3.1';
 export const SERVICE_NAME = 'plenipo-agent-sidecar';
 
 export function publicRouteFromIdentity(identity: AgentIdentity): Record<string, unknown> {
@@ -212,6 +212,18 @@ export function buildStatusPayload(input: {
       registry_url: input.identity.registryUrl || process.env.PLENIPO_REGISTRY_URL || '',
       relay_url: input.identity.relayUrl || process.env.PLENIPO_RELAY_URL || '',
     },
+  };
+}
+
+/** Builds the canonical `/events` response envelope. */
+export function eventsResponse(
+  events: Record<string, unknown>[],
+  nextAfterId: number,
+): { events: Record<string, unknown>[]; next_after_id: number; since_id: number } {
+  return {
+    events,
+    next_after_id: nextAfterId,
+    since_id: nextAfterId,
   };
 }
 
