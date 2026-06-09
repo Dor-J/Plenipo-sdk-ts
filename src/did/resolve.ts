@@ -196,7 +196,7 @@ function decodeMultibaseX25519(multibase: string): Uint8Array {
   if (!multibase.startsWith('z')) {
     throw new Error('Unsupported publicKeyMultibase encoding');
   }
-  const raw = base58btc.decode(multibase.slice(1));
+  const raw = base58btc.decode(multibase);
   if (raw.length !== 34 || raw[0] !== 0xec || raw[1] !== 0x01) {
     throw new Error('Invalid X25519 multibase key');
   }

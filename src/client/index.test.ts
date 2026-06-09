@@ -3,7 +3,7 @@ import { AddressInfo } from 'node:net';
 import { WebSocketServer } from 'ws';
 import { encPublicKeyFromDocument } from '../did/resolve.js';
 import { createDidDocument } from '../did/create.js';
-import { generateKeypair, PlenipoClient } from './index.js';
+import { generateKeypair, isChannelJoinReply, PlenipoClient } from './index.js';
 
 const baseOptions = {
   did: 'did:web:agent.example.com',
@@ -185,6 +185,28 @@ describe('PlenipoClient channel operations', () => {
       'balance.get',
       'receipt.list',
     ]);
+  });
+
+  test('isChannelJoinReply treats empty response object as join ack', () => {
+    expect(isChannelJoinReply({ status: 'ok' })).toBe(true);
+    expect(isChannelJoinReply({ status: 'ok', response: {} })).toBe(true);
+    expect(isChannelJoinReply({ status: 'ok', response: { balance: 1 } })).toBe(false);
+    expect(isChannelJoinReply({ status: 'error', response: {} })).toBe(false);
+  });
+
+  test('handlePhoenix resolves connect on join ack with empty response object', () => {
+    const client = new PlenipoClient(baseOptions);
+    const privateClient = client as unknown as ClientPrivate;
+    let resolved = false;
+
+    privateClient.handlePhoenix(
+      ['1', null, 'relay:inbox', 'phx_reply', { status: 'ok', response: {} }],
+      () => {
+        resolved = true;
+      },
+    );
+
+    expect(resolved).toBe(true);
   });
 
   test('handlePhoenix dispatches messages, receipts, and join errors', async () => {

@@ -20,12 +20,12 @@ export interface DidCreateOptions {
 
 function multibaseEd25519(publicKey: Uint8Array): string {
   const bytes = new Uint8Array([0xed, 0x01, ...publicKey]);
-  return 'z' + base58btc.encode(bytes);
+  return base58btc.encode(bytes);
 }
 
 function multibaseX25519(publicKey: Uint8Array): string {
   const bytes = new Uint8Array([0xec, 0x01, ...publicKey]);
-  return 'z' + base58btc.encode(bytes);
+  return base58btc.encode(bytes);
 }
 
 /**

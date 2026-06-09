@@ -6,6 +6,11 @@ import { seal } from '../crypto/sealedBox.js';
 import { buildRelayPayment } from '../payments/index.js';
 import { buildReceipt, type DeliveryReceiptRecord, type ReceiptListResponse } from '../delivery/index.js';
 import * as ed from '@noble/ed25519';
+import {
+  buildRelayConnectUrl,
+  relayConnectDebugMeta,
+  relayWsBaseUrl,
+} from './relayConnectUrl.js';
 
 export interface PlenipoClientOptions {
   did: string;
@@ -61,9 +66,9 @@ export class PlenipoClient {
     this.autoReceipt = options.autoReceipt ?? true;
     this.protocolVersion = options.protocolVersion ?? '1.0';
     const relayUrl = options.relayUrl ?? 'ws://localhost:4000/agent/websocket';
-    const parsed = new URL(relayUrl);
+    const parsed = new URL(relayWsBaseUrl(relayUrl));
     ensureAllowedRelayScheme(parsed);
-    this.relayWsUrl = relayUrl.includes('?') ? relayUrl : `${relayUrl}?vsn=2.0.0`;
+    this.relayWsUrl = relayWsBaseUrl(relayUrl);
     this.relayHttpUrl = relayHttpOrigin(parsed);
   }
 
@@ -85,14 +90,17 @@ export class PlenipoClient {
     const nonceBytes = decodeBase64Url(challenge.nonce);
     const signature = await sign(nonceBytes, this.authSecret);
 
-    const params = new URLSearchParams({
+    const connectParams = {
       did: this.did,
       nonce: challenge.nonce,
       signature,
-      did_document_url: this.didDocumentUrl,
-    });
+      didDocumentUrl: this.didDocumentUrl,
+    };
+    const wsUrl = buildRelayConnectUrl(this.relayWsUrl, connectParams);
 
-    const wsUrl = `${this.relayWsUrl}${this.relayWsUrl.includes('?') ? '&' : '?'}${params}`;
+    if (process.env.PLENIPO_DEBUG_WS === '1') {
+      console.info(JSON.stringify(relayConnectDebugMeta(this.relayWsUrl, connectParams)));
+    }
 
     await new Promise<void>((resolve, reject) => {
       this.ws = new WebSocket(wsUrl);
@@ -104,7 +112,7 @@ export class PlenipoClient {
         this.handlePhoenix(msg, resolve, reject);
       });
       this.ws.on('error', (err) => {
-        reject(err instanceof Error ? err : new Error(String(err)));
+        reject(formatWebSocketError(err));
       });
     });
   }
@@ -229,7 +237,7 @@ export class PlenipoClient {
     const event = msg[3] as string;
     const payload = msg[4] as Record<string, unknown>;
 
-    if (event === 'phx_reply' && payload?.status === 'ok' && !payload?.response) {
+    if (event === 'phx_reply' && isChannelJoinReply(payload)) {
       resolveConnect?.();
     }
 
@@ -255,11 +263,11 @@ export class PlenipoClient {
   }
 }
 
+const ULID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
 function generateUlid(): string {
-  const t = Date.now().toString(36).toUpperCase().padStart(10, '0');
-  const r = crypto.getRandomValues(new Uint8Array(10));
-  const rand = Array.from(r, (b) => (b % 32).toString(32).toUpperCase()).join('');
-  return (t + rand).slice(0, 26);
+  const bytes = crypto.getRandomValues(new Uint8Array(26));
+  return Array.from(bytes, (byte) => ULID_ALPHABET[byte % 32]).join('');
 }
 
 /** Generates a fresh Ed25519 keypair for tests. */
@@ -300,4 +308,32 @@ function ensureAllowedRelayScheme(parsed: URL): void {
 function isLocalRelayHost(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
   return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+}
+
+/** True for Phoenix channel join ack (`response` absent or empty object). */
+export function isChannelJoinReply(payload: Record<string, unknown> | undefined): boolean {
+  if (!payload || payload.status !== 'ok') {
+    return false;
+  }
+
+  const response = payload.response;
+  if (response === undefined || response === null) {
+    return true;
+  }
+
+  if (typeof response === 'object' && !Array.isArray(response)) {
+    return Object.keys(response).length === 0;
+  }
+
+  return false;
+}
+
+function formatWebSocketError(err: unknown): Error {
+  if (err instanceof Error) {
+    return err;
+  }
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    return new Error(String((err as { message: unknown }).message));
+  }
+  return new Error(String(err));
 }

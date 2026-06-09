@@ -24,11 +24,11 @@ import {
 } from '../sidecar/inboxCrypto.js';
 import { type OutboxRecord, type ReceiptRecord, RuntimeStore } from './store.js';
 
+const ULID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
 function generateUlid(): string {
-  const t = Date.now().toString(36).toUpperCase().padStart(10, '0');
-  const r = crypto.getRandomValues(new Uint8Array(10));
-  const rand = Array.from(r, (b) => (b % 32).toString(32).toUpperCase()).join('');
-  return (t + rand).slice(0, 26);
+  const bytes = crypto.getRandomValues(new Uint8Array(26));
+  return Array.from(bytes, (byte) => ULID_ALPHABET[byte % 32]).join('');
 }
 
 function optionalInt(value: unknown): number | null {

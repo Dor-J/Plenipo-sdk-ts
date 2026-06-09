@@ -51,9 +51,27 @@ describe('createDidDocument', () => {
     const [authMethod] = document.verificationMethod as Array<{ publicKeyMultibase: string }>;
     expect(authMethod).toBeDefined();
     if (!authMethod) throw new Error('missing auth verification method');
-    const encodedPublic = base58btc.decode(authMethod.publicKeyMultibase.slice(1));
+    expect(authMethod.publicKeyMultibase.startsWith('z')).toBe(true);
+    expect(authMethod.publicKeyMultibase.startsWith('zz')).toBe(false);
+    const encodedPublic = base58btc.decode(authMethod.publicKeyMultibase);
     const publicKey = encodedPublic.slice(2);
 
     expect(await ed.getPublicKeyAsync(authSeed)).toEqual(publicKey);
+  });
+
+  test('emits single-z multibase encryption keys compatible with Core', async () => {
+    const { document } = await createDidDocument('localhost', {
+      pathSegments: ['agents', 'multibase-test'],
+    });
+    const encMethod = (document.verificationMethod as Array<{ type: string; publicKeyMultibase: string }>).find(
+      (method) => method.type === 'X25519KeyAgreementKey2020',
+    );
+    expect(encMethod).toBeDefined();
+    if (!encMethod) {
+      throw new Error('missing encryption verification method');
+    }
+    expect(encMethod.publicKeyMultibase.startsWith('z')).toBe(true);
+    expect(encMethod.publicKeyMultibase.startsWith('zz')).toBe(false);
+    expect(encMethod.publicKeyMultibase.length).toBe(48);
   });
 });

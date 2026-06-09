@@ -22,6 +22,7 @@
     "test": "bun test",
     "test:e2e:sidecar": "bun run scripts/test-agent-sidecar-ts.ts",
     "test:e2e:sidecar-durable-events": "bun run scripts/test-agent-sidecar-durable-events-ts.ts",
+    "debug:ws-handshake": "bun run scripts/debug-ws-handshake.ts",
     "test:coverage": "bun test --coverage",
     "coverage:critical": "bun run scripts/check-critical-coverage.ts coverage/lcov.info 90",
     "typecheck": "tsc --noEmit",

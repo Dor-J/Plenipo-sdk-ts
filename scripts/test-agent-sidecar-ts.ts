@@ -239,7 +239,8 @@ async function main(): Promise<number> {
       body: JSON.stringify({ recipient_did: didB, message: payloadText }),
     });
     if (!sendResponse.ok) {
-      fail(`Send failed: ${sendResponse.status}`);
+      const errorBody = await sendResponse.text();
+      fail(`Send failed: ${sendResponse.status} ${errorBody.slice(0, 300)}`);
     }
     const sendBody = (await sendResponse.json()) as Record<string, unknown>;
     assertNoSecrets(sendBody);
