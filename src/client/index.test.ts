@@ -72,6 +72,7 @@ class FakeWs {
                 type: 'receipt.list.result',
                 v: '1.0',
                 receipts: [{ envelope_id: '01J', charged_tokens: 1 }],
+                next_cursor: null,
               }
             : event === 'message.send'
               ? { type: 'ack', v: '1.0', envelope_id: '01JACK', status: 'queued' }
@@ -175,6 +176,7 @@ describe('PlenipoClient channel operations', () => {
       type: 'receipt.list.result',
       v: '1.0',
       receipts: [{ envelope_id: '01J', charged_tokens: 1 }],
+      next_cursor: null,
     });
 
     expect(fakeWs.sent.map((message) => message[3])).toEqual([

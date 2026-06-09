@@ -38,6 +38,7 @@ export interface ReceiptListResponse {
   type: 'receipt.list.result';
   v: string;
   receipts: DeliveryReceiptRecord[];
+  next_cursor?: string | null;
 }
 
 /**

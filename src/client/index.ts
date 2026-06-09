@@ -160,12 +160,19 @@ export class PlenipoClient {
   }
 
   /** Lists persisted delivery receipts for the authenticated sender. */
-  async listReceipts(options?: { since?: string; limit?: number }): Promise<ReceiptListResponse> {
+  async listReceipts(options?: {
+    since?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<ReceiptListResponse> {
     const ref = String(this.refCounter++);
-    return this.requestReply<ReceiptListResponse>(ref, 'receipt.list', {
-      since: options?.since,
-      limit: options?.limit ?? 100,
-    });
+    const payload: Record<string, unknown> = { limit: options?.limit ?? 100 };
+    if (options?.cursor) {
+      payload.cursor = options.cursor;
+    } else if (options?.since) {
+      payload.since = options.since;
+    }
+    return this.requestReply<ReceiptListResponse>(ref, 'receipt.list', payload);
   }
 
   private requestReply<T>(ref: string, event: string, payload: unknown): Promise<T> {
