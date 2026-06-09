@@ -139,6 +139,24 @@ export function registerPlenipoTools(server: McpServer): void {
   );
 
   server.registerTool(
+    'plenipo_receipts',
+    {
+      description: 'List persisted delivery receipts with billing metadata',
+      inputSchema: {
+        since: z.string().optional(),
+        limit: z.number().int().positive().max(500).default(100),
+      },
+    },
+    async ({ since, limit }) => {
+      const runtime = getMcpRuntime();
+      const receipts = await runtime.listReceipts({ since, limit });
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ receipts }, null, 2) }],
+      };
+    },
+  );
+
+  server.registerTool(
     'plenipo_delivery_status',
     {
       description: 'Get delivery status for an envelope (queued, delivered, receipt_confirmed, expired)',

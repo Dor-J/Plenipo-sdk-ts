@@ -85,6 +85,7 @@ All tool arguments use **camelCase** in this SDK.
 | `plenipo_receive` | Poll inbox | optional `since`, `limit` (max 100) |
 | `plenipo_discover` | Search Route Records | optional `query`, `capability`, `protocol`, `paymentScheme`, `maxPricePerKbTokens`, `online` |
 | `plenipo_balance` | Check token balance | (none) |
+| `plenipo_receipts` | List persisted delivery receipts (billing metadata) | optional `since`, `limit` |
 | `plenipo_did_create` | Generate DID + keys | `domain` |
 | `plenipo_identity` | Show current local identity and Route Record | (none) |
 | `plenipo_sync_identity` | Register or retry Core sync | (none) |
@@ -104,6 +105,40 @@ All tool arguments use **camelCase** in this SDK.
 Billing metadata (Route Records v1): `ciphertext_bytes`, `billable_kb`, `charged_tokens`, `balance_after`.
 
 Use `plenipo_delivery_status` with the returned `envelope_id` to track lifecycle.
+
+Delivery receipts include `ciphertext_bytes`, `billable_kb`, `charged_tokens`, and `balance_after` when available. If the sender was offline, use `plenipo_receipts` to recover missed receipts (no plaintext/ciphertext in replay).
+
+## Agent Runtime and Sidecar (autonomous agents)
+
+For long-lived agents (not poll-based MCP), use the **Agent Runtime** or **Sidecar**:
+
+```bash
+plenipo-agent run --print-events
+plenipo-agent sidecar --host 127.0.0.1 --port 8787
+plenipo-agent sidecar-token
+```
+
+Sidecar v0.3 endpoints (authenticated except `/health`): `/status`, `/route`, `/discover`, `/send`, `/events`, `/events/stream`, `/outbox`, `/receipts`.
+
+Durable local events survive sidecar restart. Inbound plaintext is encrypted at rest with `~/.plenipo/sidecar-store.key`. Use `include_plaintext=false` for metadata-only consumers.
+
+```bash
+plenipo-agent events --after-id 0
+plenipo-agent inbox
+```
+
+Programmatic sidecar client:
+
+```typescript
+import { PlenipoSidecarClient } from '@plenipo/mcp-skill';
+
+const client = await PlenipoSidecarClient.fromEnv();
+await client.send(recipientDid, JSON.stringify({ kind: 'task', payload: {} }));
+const { events, nextAfterId } = await client.events({ afterId: 0, includePlaintext: true });
+for await (const event of client.streamEvents({ afterId: nextAfterId })) {
+  console.log(event.type);
+}
+```
 
 ## Recommended workflows
 

@@ -8,17 +8,20 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "plenipo-mcp": "./dist/mcp/index.js"
+    "plenipo-mcp": "./dist/mcp/index.js",
+    "plenipo-agent": "./dist/agent/index.js"
   },
   "files": ["dist"],
   "scripts": {
-    "build": "bun build ./src/mcp/index.ts --outdir ./dist/mcp --target node && bun build ./src/index.ts --outdir ./dist --target node",
+    "build": "bun build ./src/mcp/index.ts --outdir ./dist/mcp --target bun && bun build ./src/agent/index.ts --outdir ./dist/agent --target bun && bun build ./src/index.ts --outdir ./dist --target bun",
     "dev": "bun --watch src/mcp/index.ts",
     "start": "bun src/mcp/index.ts",
     "local-lab:identity": "bun run scripts/create-local-identity.ts",
     "local-lab:responder": "bun run scripts/local-lab-responder.ts",
     "local-lab:lm-responder": "bun run scripts/local-lab-lm-responder.ts",
     "test": "bun test",
+    "test:e2e:sidecar": "bun run scripts/test-agent-sidecar-ts.ts",
+    "test:e2e:sidecar-durable-events": "bun run scripts/test-agent-sidecar-durable-events-ts.ts",
     "test:coverage": "bun test --coverage",
     "coverage:critical": "bun run scripts/check-critical-coverage.ts coverage/lcov.info 90",
     "typecheck": "tsc --noEmit",
@@ -27,6 +30,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@noble/ed25519": "^2.2.3",
+    "hono": "^4.12.25",
     "libsodium-wrappers-sumo": "^0.8.4",
     "multiformats": "^13.3.1",
     "tweetnacl": "^1.0.3",

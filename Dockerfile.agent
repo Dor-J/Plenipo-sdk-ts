@@ -1,0 +1,22 @@
+FROM oven/bun:1.2-slim
+
+WORKDIR /app
+
+RUN useradd --create-home --uid 10001 plenipo || adduser --disabled-password --uid 10001 plenipo
+
+COPY package.json bun.lock* tsconfig.json /app/
+COPY src /app/src/
+
+RUN bun install --frozen-lockfile || bun install
+
+ENV PLENIPO_HOME=/data
+ENV PLENIPO_CORE_URL=http://host.docker.internal:4000
+ENV PLENIPO_REGISTRY_URL=http://host.docker.internal:4001
+ENV PLENIPO_RELAY_URL=ws://host.docker.internal:4000/agent/websocket
+
+EXPOSE 8787
+
+USER plenipo
+VOLUME ["/data"]
+
+CMD ["bun", "run", "src/agent/index.ts", "sidecar", "--host", "0.0.0.0", "--port", "8787", "--allow-remote-bind"]

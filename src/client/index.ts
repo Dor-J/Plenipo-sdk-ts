@@ -103,7 +103,9 @@ export class PlenipoClient {
         const msg = JSON.parse(data.toString()) as unknown[];
         this.handlePhoenix(msg, resolve, reject);
       });
-      this.ws.on('error', reject);
+      this.ws.on('error', (err) => {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      });
     });
   }
 
@@ -111,9 +113,10 @@ export class PlenipoClient {
     recipientDid: string,
     plaintext: string,
     recipientEncPublicKey: Uint8Array,
+    options?: { envelopeId?: string },
   ): Promise<SendAck> {
     const ciphertext = seal(new TextEncoder().encode(plaintext), recipientEncPublicKey);
-    const envelopeId = generateUlid();
+    const envelopeId = options?.envelopeId ?? generateUlid();
     const createdAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
     const envelope = {
@@ -173,6 +176,19 @@ export class PlenipoClient {
       payload.since = options.since;
     }
     return this.requestReply<ReceiptListResponse>(ref, 'receipt.list', payload);
+  }
+
+  /** Returns true when the relay websocket is open. */
+  get connected(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  /** Closes the relay websocket connection. */
+  async disconnect(): Promise<void> {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = undefined;
+    }
   }
 
   private requestReply<T>(ref: string, event: string, payload: unknown): Promise<T> {

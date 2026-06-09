@@ -160,6 +160,17 @@ export class McpRuntime {
     return client.getBalance();
   }
 
+  async listReceipts(options?: {
+    since?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<Record<string, unknown>[]> {
+    const client = await this.ensureConnected();
+    const result = await client.listReceipts(options);
+    const receipts = result.receipts ?? [];
+    return Array.isArray(receipts) ? (receipts as unknown as Record<string, unknown>[]) : [];
+  }
+
   drainMessages(since?: string, limit = 100): BufferedMessage[] {
     const drained: BufferedMessage[] = [];
     const kept: BufferedMessage[] = [];
