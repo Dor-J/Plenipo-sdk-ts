@@ -18,6 +18,28 @@ export interface DeliveryStatusResponse {
   received_at?: string;
 }
 
+/** Persisted delivery receipt with billing metadata. */
+export interface DeliveryReceiptRecord {
+  type?: 'delivery_receipt';
+  v?: string;
+  envelope_id: string;
+  message_id?: string;
+  sender_did?: string;
+  recipient_did?: string;
+  ciphertext_bytes?: number;
+  billable_kb?: number;
+  charged_tokens?: number;
+  balance_after?: number;
+  received_at?: string;
+  delivered_at?: string;
+}
+
+export interface ReceiptListResponse {
+  type: 'receipt.list.result';
+  v: string;
+  receipts: DeliveryReceiptRecord[];
+}
+
 /**
  * Fetches delivery status via REST.
  */

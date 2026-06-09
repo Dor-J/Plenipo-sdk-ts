@@ -67,9 +67,15 @@ class FakeWs {
       const response =
         event === 'balance.get'
           ? { balance: 55 }
-          : event === 'message.send'
-            ? { type: 'ack', v: '1.0', envelope_id: '01JACK', status: 'queued' }
-            : { ok: true };
+          : event === 'receipt.list'
+            ? {
+                type: 'receipt.list.result',
+                v: '1.0',
+                receipts: [{ envelope_id: '01J', charged_tokens: 1 }],
+              }
+            : event === 'message.send'
+              ? { type: 'ack', v: '1.0', envelope_id: '01JACK', status: 'queued' }
+              : { ok: true };
       this.emit(['1', ref, 'relay:inbox', 'phx_reply', { status: 'ok', response }]);
     }
   }
@@ -165,10 +171,17 @@ describe('PlenipoClient channel operations', () => {
     expect(await client.getDeliveryStatus('01JENV')).toEqual({ ok: true });
     expect(await client.getBalance()).toBe(55);
 
+    expect(await client.listReceipts({ since: '2026-06-08T20:56:00Z', limit: 5 })).toEqual({
+      type: 'receipt.list.result',
+      v: '1.0',
+      receipts: [{ envelope_id: '01J', charged_tokens: 1 }],
+    });
+
     expect(fakeWs.sent.map((message) => message[3])).toEqual([
       'message.receipt',
       'delivery.get',
       'balance.get',
+      'receipt.list',
     ]);
   });
 

@@ -4,7 +4,7 @@ import { sign } from '../crypto/ed25519.js';
 import { buildSigningInput } from '../crypto/signingInput.js';
 import { seal } from '../crypto/sealedBox.js';
 import { buildRelayPayment } from '../payments/index.js';
-import { buildReceipt } from '../delivery/index.js';
+import { buildReceipt, type DeliveryReceiptRecord, type ReceiptListResponse } from '../delivery/index.js';
 import * as ed from '@noble/ed25519';
 
 export interface PlenipoClientOptions {
@@ -35,17 +35,7 @@ export interface SendAck {
 }
 
 type MessageHandler = (envelope: Record<string, string>) => void;
-type ReceiptHandler = (payload: {
-  envelope_id: string;
-  received_at?: string;
-  sender_did?: string;
-  recipient_did?: string;
-  ciphertext_bytes?: number;
-  billable_kb?: number;
-  charged_tokens?: number;
-  balance_after?: number;
-  delivered_at?: string;
-}) => void;
+export type ReceiptHandler = (payload: DeliveryReceiptRecord) => void;
 
 /**
  * Programmatic client for the Plenipo relay.
@@ -169,6 +159,15 @@ export class PlenipoClient {
     return payload.balance;
   }
 
+  /** Lists persisted delivery receipts for the authenticated sender. */
+  async listReceipts(options?: { since?: string; limit?: number }): Promise<ReceiptListResponse> {
+    const ref = String(this.refCounter++);
+    return this.requestReply<ReceiptListResponse>(ref, 'receipt.list', {
+      since: options?.since,
+      limit: options?.limit ?? 100,
+    });
+  }
+
   private requestReply<T>(ref: string, event: string, payload: unknown): Promise<T> {
     return new Promise((resolve, reject) => {
       const handler = (data: Buffer) => {
@@ -223,7 +222,7 @@ export class PlenipoClient {
 
     if (event === 'message.receipt' && payload) {
       for (const h of this.receiptHandlers) {
-        h(payload as { envelope_id: string; received_at?: string });
+        h(payload as unknown as DeliveryReceiptRecord);
       }
     }
 
