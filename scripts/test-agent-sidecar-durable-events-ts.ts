@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /** E2E: Sidecar v0.3 durable local events survive sidecar restart (TypeScript). */
 
-import { mkdtempSync } from 'node:fs';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -10,8 +10,23 @@ import { Database } from 'bun:sqlite';
 
 const TOKEN_A = 'e2e-durable-token-a';
 const TOKEN_B = 'e2e-durable-token-b';
-const PORT_A = 19887;
-const PORT_B = 19888;
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        server.close();
+        reject(new Error('Failed to allocate free port'));
+        return;
+      }
+      const { port } = address;
+      server.close((error) => (error ? reject(error) : resolve(port)));
+    });
+  });
+}
 
 function ok(message: string): void {
   console.log(`[OK] ${message}`);
@@ -26,7 +41,7 @@ function authHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}` };
 }
 
-async function waitHealth(baseUrl: string, timeoutMs = 30_000): Promise<void> {
+async function waitHealth(baseUrl: string, timeoutMs = 60_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -113,23 +128,34 @@ async function main(): Promise<number> {
   const homeA = join(tmp, 'agent-a');
   const homeB = join(tmp, 'agent-b');
 
-  const baseA = `http://127.0.0.1:${PORT_A}`;
-  const baseB = `http://127.0.0.1:${PORT_B}`;
+  const portA = await freePort();
+  const portB = await freePort();
+  const baseA = `http://127.0.0.1:${portA}`;
+  const baseB = `http://127.0.0.1:${portB}`;
   const payloadText = JSON.stringify({ kind: 'plenipo.sidecar.v0.3', nonce: 'durable-ts' });
 
-  let procA = spawnSidecar(PORT_A, homeA, TOKEN_A);
-  let procB = spawnSidecar(PORT_B, homeB, TOKEN_B);
+  let procA = spawnSidecar(portA, homeA, TOKEN_A);
+  let procB: ChildProcess | null = null;
 
   const stop = async (): Promise<void> => {
     for (const proc of [procA, procB]) {
-      proc.kill('SIGTERM');
+      if (proc) {
+        proc.kill('SIGTERM');
+      }
     }
     await Bun.sleep(1000);
   };
 
   try {
     await waitHealth(baseA);
+    if (procA.exitCode !== null) {
+      fail(`Sidecar A exited during startup (code=${procA.exitCode})`);
+    }
+    procB = spawnSidecar(portB, homeB, TOKEN_B);
     await waitHealth(baseB);
+    if (procB.exitCode !== null) {
+      fail(`Sidecar B exited during startup (code=${procB.exitCode})`);
+    }
     ok('Both sidecars healthy');
 
     const statusB = (await (
@@ -171,7 +197,7 @@ async function main(): Promise<number> {
 
     procB.kill('SIGTERM');
     await Bun.sleep(1000);
-    procB = spawnSidecar(PORT_B, homeB, TOKEN_B);
+    procB = spawnSidecar(portB, homeB, TOKEN_B);
     await waitHealth(baseB);
     ok('Agent B sidecar restarted with same PLENIPO_HOME');
 

@@ -2,9 +2,27 @@
 /** E2E: Plenipo Agent Sidecar v0.2.1 authenticated two-agent messaging (TypeScript). */
 
 import { mkdtempSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn, type ChildProcess } from 'node:child_process';
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        server.close();
+        reject(new Error('Failed to allocate free port'));
+        return;
+      }
+      const { port } = address;
+      server.close((error) => (error ? reject(error) : resolve(port)));
+    });
+  });
+}
 
 const DEFAULT_ROUTE = {
   protocols: ['plenipo.message.v1'],
@@ -160,21 +178,23 @@ async function main(): Promise<number> {
       },
     );
 
-  const portA = 18787;
-  const portB = 18788;
+  const portA = await freePort();
+  const portB = await freePort();
   const baseA = `http://127.0.0.1:${portA}`;
   const baseB = `http://127.0.0.1:${portB}`;
 
   const procA = spawnSidecar(portA, homeA, TOKEN_A);
-  const procB = spawnSidecar(portB, homeB, TOKEN_B);
+  let procB: ChildProcess | null = null;
 
   const stop = async (): Promise<void> => {
     for (const proc of [procA, procB]) {
-      proc.kill('SIGTERM');
+      if (proc) {
+        proc.kill('SIGTERM');
+      }
     }
     await Bun.sleep(1000);
     for (const proc of [procA, procB]) {
-      if (!proc.killed) {
+      if (proc && !proc.killed) {
         proc.kill('SIGKILL');
       }
     }
@@ -182,7 +202,14 @@ async function main(): Promise<number> {
 
   try {
     await waitHealth(baseA);
+    if (procA.exitCode !== null) {
+      fail(`Sidecar A exited during startup (code=${procA.exitCode})`);
+    }
+    procB = spawnSidecar(portB, homeB, TOKEN_B);
     await waitHealth(baseB);
+    if (procB.exitCode !== null) {
+      fail(`Sidecar B exited during startup (code=${procB.exitCode})`);
+    }
     ok('Both sidecars healthy');
 
     const unauth = await fetch(`${baseA}/status`);
