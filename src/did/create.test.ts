@@ -12,7 +12,7 @@ describe('createDidDocument', () => {
     expect(service?.payment).toEqual({
       model: 'per_kb',
       price_per_kb_tokens: 1,
-      accepted_schemes: ['plenipo-dev-token'],
+      accepted_schemes: ['plenipo-prepaid-token'],
     });
     expect(service?.limits).toEqual({
       max_message_kb: 256,

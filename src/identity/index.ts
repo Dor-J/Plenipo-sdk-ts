@@ -10,6 +10,7 @@ export {
   buildRegisterPayload,
   documentFingerprint,
   signRegisterPayload,
+  signRotationPayload,
 } from './registerSigning.js';
 export {
   syncIdentityWithCore,
@@ -18,6 +19,9 @@ export {
 } from './sync.js';
 export {
   coreHostedDocumentUrl,
+  externalDidWebDocumentUrl,
+  isCoreHostedLocalDid,
+  validateProductionDidWeb,
 } from './urls.js';
 export {
   identityFromCreateResult,

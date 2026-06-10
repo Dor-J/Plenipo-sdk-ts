@@ -6,7 +6,7 @@ export function syncWarningsFromError(error: unknown): string[] {
     return ['Core-hosted local registration is disabled on Core'];
   }
   if (message.includes('status 409')) {
-    return ['Core rejected auth key change (key takeover)'];
+    return ['Core rejected auth key rotation; previous and new key proofs are required'];
   }
   if (/status 40[01]/.test(message)) {
     return [`Core registration rejected (${message})`];

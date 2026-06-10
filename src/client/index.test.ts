@@ -46,6 +46,7 @@ describe('PlenipoClient relay URL handling', () => {
 
 class FakeWs {
   sent: unknown[][] = [];
+  failEvents = new Set<string>();
   private messageHandlers: Array<(data: Buffer) => void> = [];
 
   on(event: string, handler: (data: Buffer) => void): void {
@@ -64,6 +65,17 @@ class FakeWs {
     const ref = message[1] as string | null;
     const event = message[3] as string;
     if (ref) {
+      if (this.failEvents.has(event)) {
+        this.emit([
+          '1',
+          ref,
+          'relay:inbox',
+          'phx_reply',
+          { status: 'error', response: { code: 'relay_error' } },
+        ]);
+        return;
+      }
+
       const response =
         event === 'balance.get'
           ? { balance: 55 }
@@ -99,11 +111,14 @@ interface ClientPrivate {
 describe('PlenipoClient channel operations', () => {
   test('connect fetches challenge, signs nonce, and joins websocket', async () => {
     const originalFetch = globalThis.fetch;
+    const originalDebug = process.env.PLENIPO_DEBUG_WS;
+    const originalInfo = console.info;
     const server = new WebSocketServer({ port: 0 });
     const listening = new Promise<void>((resolve) => server.once('listening', resolve));
     await listening;
     const port = (server.address() as AddressInfo).port;
     const received: unknown[][] = [];
+    const debugLogs: string[] = [];
 
     server.on('connection', (socket) => {
       socket.on('message', (raw) => {
@@ -121,19 +136,31 @@ describe('PlenipoClient channel operations', () => {
       })) as unknown as typeof fetch;
 
     try {
+      process.env.PLENIPO_DEBUG_WS = '1';
+      console.info = (...data: unknown[]) => {
+        debugLogs.push(data.map(String).join(' '));
+      };
+
       const client = new PlenipoClient({
         ...baseOptions,
         relayUrl: `ws://127.0.0.1:${port}/agent/websocket`,
       });
 
-      const connectPromise = client.connect().catch(() => undefined);
+      const connectPromise = client.connect();
       await waitFor(() => received.length > 0);
       expect(received[0]?.[3]).toBe('phx_join');
       expect(received[0]?.[4]).toEqual({});
-      void connectPromise;
+      await connectPromise;
+      expect(debugLogs.join('\n')).toContain('final_ws_url');
       (client as unknown as { ws?: { close: () => void } }).ws?.close();
     } finally {
       globalThis.fetch = originalFetch;
+      console.info = originalInfo;
+      if (originalDebug === undefined) {
+        delete process.env.PLENIPO_DEBUG_WS;
+      } else {
+        process.env.PLENIPO_DEBUG_WS = originalDebug;
+      }
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
@@ -185,6 +212,16 @@ describe('PlenipoClient channel operations', () => {
       'balance.get',
       'receipt.list',
     ]);
+  });
+
+  test('request helpers reject relay error replies', async () => {
+    const client = new PlenipoClient(baseOptions);
+    const fakeWs = new FakeWs();
+    fakeWs.failEvents.add('message.receipt');
+    (client as unknown as ClientPrivate).ws = fakeWs;
+
+    await expect(client.sendReceipt('01JERROR')).rejects.toThrow('relay_error');
+    expect(fakeWs.sent[0]?.[3]).toBe('message.receipt');
   });
 
   test('isChannelJoinReply treats empty response object as join ack', () => {

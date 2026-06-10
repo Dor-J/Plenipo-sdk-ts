@@ -6,7 +6,12 @@ import type { AgentEvent } from '../runtime/events.js';
 import { loadRuntimeState } from '../runtime/state.js';
 import { RuntimeStore } from '../runtime/store.js';
 import { readSidecarTokenFile, sidecarTokenPath } from '../sidecar/auth.js';
-import { DEFAULT_SIDECAR_CONFIG, validateBindHost, validateNoAuthBind } from '../sidecar/config.js';
+import {
+  resolveSidecarConfig,
+  validateBindHost,
+  validateNoAuthBind,
+  validateTlsConfig,
+} from '../sidecar/config.js';
 import { runSidecar } from '../sidecar/server.js';
 
 function applyLocalDefaults(): void {
@@ -218,26 +223,34 @@ function showSidecarToken(args: CliArgs): number {
 
 async function runSidecarCommand(args: CliArgs): Promise<number> {
   applyLocalDefaults();
-  const config = {
-    ...DEFAULT_SIDECAR_CONFIG,
-    host: String(args.host ?? DEFAULT_SIDECAR_CONFIG.host),
-    port: Number(args.port ?? DEFAULT_SIDECAR_CONFIG.port),
-    capability: String(args.capability ?? DEFAULT_SIDECAR_CONFIG.capability),
-    protocol: String(args.protocol ?? DEFAULT_SIDECAR_CONFIG.protocol),
-    allowRemoteBind: Boolean(args['allow-remote-bind']),
-    token: typeof args.token === 'string' ? args.token : null,
-    noAuth: Boolean(args['no-auth']),
-    printToken: Boolean(args['print-token']),
-    allowedOrigins: Array.isArray(args['allow-origin'])
-      ? (args['allow-origin'] as string[])
-      : typeof args['allow-origin'] === 'string'
-        ? [args['allow-origin']]
-        : [],
-  };
+  const config = resolveSidecarConfig({
+    configPath: typeof args.config === 'string' ? args.config : undefined,
+    cliConfig: {
+      host: typeof args.host === 'string' ? args.host : undefined,
+      port: typeof args.port === 'string' ? Number(args.port) : undefined,
+      capability: typeof args.capability === 'string' ? args.capability : undefined,
+      protocol: typeof args.protocol === 'string' ? args.protocol : undefined,
+      allowRemoteBind: args['allow-remote-bind'] === true ? true : undefined,
+      token: typeof args.token === 'string' ? args.token : undefined,
+      signedRequestSecret:
+        typeof args['signed-request-secret'] === 'string' ? args['signed-request-secret'] : undefined,
+      noAuth: args['no-auth'] === true ? true : undefined,
+      printToken: args['print-token'] === true ? true : undefined,
+      allowedOrigins: Array.isArray(args['allow-origin'])
+        ? (args['allow-origin'] as string[])
+        : typeof args['allow-origin'] === 'string'
+          ? [args['allow-origin']]
+          : undefined,
+      tlsCert: typeof args['tls-cert'] === 'string' ? args['tls-cert'] : undefined,
+      tlsKey: typeof args['tls-key'] === 'string' ? args['tls-key'] : undefined,
+      logLevel: typeof args['log-level'] === 'string' ? args['log-level'] : undefined,
+    },
+  });
 
   try {
     validateBindHost(config.host, config.allowRemoteBind);
     validateNoAuthBind(config.host, config.noAuth);
+    validateTlsConfig(config);
   } catch (error) {
     console.error(String(error));
     return 2;

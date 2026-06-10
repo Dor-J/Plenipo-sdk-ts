@@ -6,7 +6,7 @@ import { saveIdentity, type AgentIdentity } from './store.js';
 export const ENCRYPTION_ALG = 'x25519-xsalsa20poly1305';
 const SUPPORTED_PROTOCOLS = new Set(['plenipo.message.v1']);
 const SUPPORTED_PAYMENT_MODELS = new Set(['per_kb']);
-const SUPPORTED_SCHEMES = new Set(['plenipo-dev-token']);
+const SUPPORTED_SCHEMES = new Set(['plenipo-prepaid-token']);
 const MAX_PROTOCOLS = 16;
 const MAX_SCHEMES = 8;
 const MAX_PRICE_PER_KB = 1000;
@@ -52,7 +52,7 @@ export function defaultRouteServiceFields(): RouteServiceFields {
     payment: {
       model: 'per_kb',
       price_per_kb_tokens: 1,
-      accepted_schemes: ['plenipo-dev-token'],
+      accepted_schemes: ['plenipo-prepaid-token'],
     },
     limits: {
       max_message_kb: 256,
@@ -232,7 +232,7 @@ export function normalizeRouteRecord(raw: Record<string, unknown>): RouteRecord 
       price_per_kb_tokens: Number(payment.price_per_kb_tokens ?? 1),
       accepted_schemes: Array.isArray(payment.accepted_schemes)
         ? payment.accepted_schemes.map(String)
-        : ['plenipo-dev-token'],
+        : ['plenipo-prepaid-token'],
     },
     limits: {
       max_message_kb: Number(limits.max_message_kb ?? 256),

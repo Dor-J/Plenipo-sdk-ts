@@ -45,11 +45,11 @@ describe('route metadata', () => {
       payment: {
         model: 'per_kb',
         price_per_kb_tokens: 1,
-        accepted_schemes: ['plenipo-dev-token'],
+        accepted_schemes: ['plenipo-prepaid-token'],
       },
       limits: { max_message_kb: 256, offline_queue_ttl_seconds: 86400 },
     });
-    expect(record.payment.accepted_schemes).toEqual(['plenipo-dev-token']);
+    expect(record.payment.accepted_schemes).toEqual(['plenipo-prepaid-token']);
   });
 
   it('extracts route from DID document', () => {
@@ -63,7 +63,7 @@ describe('route metadata', () => {
           payment: {
             model: 'per_kb',
             price_per_kb_tokens: 1,
-            accepted_schemes: ['plenipo-dev-token'],
+            accepted_schemes: ['plenipo-prepaid-token'],
           },
         },
       ],

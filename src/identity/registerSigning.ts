@@ -61,3 +61,14 @@ export function signRegisterPayload(payload: Record<string, string>, authSecretB
   const signature = nacl.sign.detached(signingBytes(payload), signing.secretKey);
   return encodeBase64Url(signature);
 }
+
+/** Signs a rotation payload with both previous and new auth keys. */
+export function signRotationPayload(
+  payload: Record<string, string>,
+  keys: { previousAuthSecretB64: string; newAuthSecretB64: string },
+): { previous_signature: string; signature: string } {
+  return {
+    previous_signature: signRegisterPayload(payload, keys.previousAuthSecretB64),
+    signature: signRegisterPayload(payload, keys.newAuthSecretB64),
+  };
+}
