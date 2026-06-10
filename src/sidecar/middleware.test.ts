@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { Hono } from 'hono';
-import { authMiddleware, corsMiddleware } from './middleware.js';
+import { authMiddleware, buildSignedRequestHeaders, corsMiddleware } from './middleware.js';
 
 describe('sidecar middleware', () => {
   it('allows /health without auth', async () => {
@@ -27,6 +27,54 @@ describe('sidecar middleware', () => {
       headers: { Authorization: 'Bearer secret' },
     });
     expect(response.status).toBe(200);
+  });
+
+  it('rejects unsigned requests when signed request mode is enabled', async () => {
+    const app = new Hono();
+    app.use(
+      '*',
+      authMiddleware({
+        authEnabled: true,
+        token: 'secret',
+        signedRequestSecret: 'signing-secret',
+        allowedOrigins: new Set(),
+      }),
+    );
+    app.post('/send', (c) => c.json({ ok: true }));
+    const response = await app.request('/send', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer secret' },
+      body: JSON.stringify({ message: 'hi' }),
+    });
+    expect(response.status).toBe(401);
+  });
+
+  it('accepts signed requests when signed request mode is enabled', async () => {
+    const app = new Hono();
+    const body = JSON.stringify({ message: 'hi' });
+    app.use(
+      '*',
+      authMiddleware({
+        authEnabled: true,
+        token: 'secret',
+        signedRequestSecret: 'signing-secret',
+        allowedOrigins: new Set(),
+      }),
+    );
+    app.post('/send', async (c) => c.json(await c.req.json()));
+
+    const response = await app.request('/send', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer secret',
+        'Content-Type': 'application/json',
+        ...buildSignedRequestHeaders('signing-secret', 'POST', '/send', body),
+      },
+      body,
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ message: 'hi' });
   });
 
   it('rejects disallowed browser origins', async () => {

@@ -7,6 +7,7 @@ import type { SidecarSecurity } from './config.js';
 import { DurableEventService } from './events.js';
 import { SidecarStoreKeyError } from './inboxCrypto.js';
 import { authMiddleware, corsMiddleware, loggingMiddleware } from './middleware.js';
+import { renderSidecarMetrics } from './metrics.js';
 import {
   buildStatusPayload,
   outboxRecordToDict,
@@ -34,6 +35,8 @@ export function createSidecarApp(ctx: SidecarContext): Hono {
   app.get('/health', (c) =>
     c.json({ ok: true, service: SERVICE_NAME, version: SIDECAR_VERSION }),
   );
+
+  app.get('/metrics', (c) => c.text(renderSidecarMetrics(ctx.runtime), 200));
 
   app.get('/status', (c) => {
     const identity = ctx.runtime.getIdentity();

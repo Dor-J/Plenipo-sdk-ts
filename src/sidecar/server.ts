@@ -1,4 +1,5 @@
 import { serve } from 'bun';
+import { readFileSync } from 'node:fs';
 import { declareRoute, defaultRouteServiceFields } from '../identity/route.js';
 import { PlenipoAgentRuntime } from '../runtime/agent.js';
 import { resolveSidecarToken } from './auth.js';
@@ -11,6 +12,7 @@ import {
   type SidecarSecurity,
   validateBindHost,
   validateNoAuthBind,
+  validateTlsConfig,
 } from './config.js';
 import { consumeRuntimeEvents, DurableEventService } from './events.js';
 
@@ -25,6 +27,7 @@ export interface SidecarHandle {
 export async function runSidecar(config: SidecarConfig): Promise<SidecarHandle> {
   validateBindHost(config.host, config.allowRemoteBind);
   validateNoAuthBind(config.host, config.noAuth);
+  validateTlsConfig(config);
   if (!['127.0.0.1', 'localhost', '::1'].includes(config.host.trim().toLowerCase())) {
     console.warn(remoteBindWarning(config.host));
   }
@@ -65,17 +68,27 @@ export async function runSidecar(config: SidecarConfig): Promise<SidecarHandle> 
   const security: SidecarSecurity = {
     authEnabled: !config.noAuth,
     token,
+    signedRequestSecret: config.signedRequestSecret ?? process.env.PLENIPO_SIDECAR_SIGNING_SECRET ?? null,
     allowedOrigins: allowedOriginsFromConfig(config),
   };
 
   const app = createSidecarApp({ runtime, eventBuffer, security });
+  const tls =
+    config.tlsCert && config.tlsKey
+      ? {
+          cert: readFileSync(config.tlsCert, 'utf8'),
+          key: readFileSync(config.tlsKey, 'utf8'),
+        }
+      : undefined;
   const server = serve({
     hostname: config.host,
     port: config.port,
     fetch: app.fetch,
+    ...(tls ? { tls } : {}),
   });
 
-  console.info(`Plenipo sidecar listening on http://${config.host}:${config.port}`);
+  const scheme = tls ? 'https' : 'http';
+  console.info(`Plenipo sidecar listening on ${scheme}://${config.host}:${config.port}`);
 
   return {
     runtime,
