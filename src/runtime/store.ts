@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import { plenipoHome } from '../identity/store.js';
 
+export const RUNTIME_SCHEMA_VERSION = 1;
+
 export interface OutboxRecord {
   envelopeId: string;
   recipientDid: string;
@@ -84,6 +86,12 @@ export class RuntimeStore {
   }
 
   private initSchema(): void {
+    const existingVersion = this.schemaVersion();
+    if (existingVersion > RUNTIME_SCHEMA_VERSION) {
+      throw new Error(
+        `Runtime database schema version ${existingVersion} is newer than this SDK supports (${RUNTIME_SCHEMA_VERSION})`,
+      );
+    }
     this.db.run(`
       CREATE TABLE IF NOT EXISTS outbox (
         envelope_id TEXT PRIMARY KEY,
@@ -147,6 +155,14 @@ export class RuntimeStore {
         metadata_json TEXT NOT NULL
       )
     `);
+    if (existingVersion < RUNTIME_SCHEMA_VERSION) {
+      this.db.run(`PRAGMA user_version = ${RUNTIME_SCHEMA_VERSION}`);
+    }
+  }
+
+  schemaVersion(): number {
+    const row = this.db.query('PRAGMA user_version').get() as { user_version: number } | null;
+    return Number(row?.user_version ?? 0);
   }
 
   getState(key: string): string | null {
@@ -239,6 +255,13 @@ export class RuntimeStore {
       counts[row.status] = Number(row.count);
     }
     return counts;
+  }
+
+  countReceipts(): number {
+    const row = this.db.query('SELECT COUNT(*) AS count FROM receipts').get() as
+      | { count: number }
+      | null;
+    return Number(row?.count ?? 0);
   }
 
   upsertReceipt(payload: Record<string, unknown>, senderDid: string): boolean {
@@ -335,6 +358,24 @@ export class RuntimeStore {
     const row = this.db.query(`SELECT COUNT(*) AS count FROM inbox_messages`).get() as
       | { count: number }
       | null;
+    return Number(row?.count ?? 0);
+  }
+
+  countSidecarEventsByType(): Record<string, number> {
+    const rows = this.db
+      .query('SELECT event_type, COUNT(*) AS count FROM sidecar_events GROUP BY event_type')
+      .all() as Array<{ event_type: string; count: number }>;
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      counts[row.event_type] = Number(row.count);
+    }
+    return counts;
+  }
+
+  countPendingSidecarEvents(): number {
+    const row = this.db
+      .query('SELECT COUNT(*) AS count FROM sidecar_events WHERE delivered_to_client_at IS NULL')
+      .get() as { count: number } | null;
     return Number(row?.count ?? 0);
   }
 

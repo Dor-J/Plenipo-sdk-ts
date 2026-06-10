@@ -1,10 +1,21 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { PlenipoClient } from '../../client/index.js';
 import { createDidDocument } from '../../did/create.js';
+import { identityFromCreateResult, saveIdentity } from '../../identity/store.js';
 import { createPlenipoMcpServer } from '../index.js';
+import { resetMcpRuntime, setMcpRuntime } from '../runtime.js';
 import { registerPlenipoTools } from './index.js';
 
+type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
+
 describe('createPlenipoMcpServer', () => {
+  afterEach(() => {
+    resetMcpRuntime();
+  });
+
   it('creates a server instance', () => {
     const server = createPlenipoMcpServer();
     expect(server).toBeDefined();
@@ -49,12 +60,7 @@ describe('createPlenipoMcpServer', () => {
     const previousConnect = PlenipoClient.prototype.connect;
     const previousSend = PlenipoClient.prototype.send;
     const previousBalance = PlenipoClient.prototype.getBalance;
-    const previousEnv = {
-      did: process.env.PLENIPO_DID,
-      auth: process.env.PLENIPO_AUTH_SECRET_B64,
-      doc: process.env.PLENIPO_DID_DOCUMENT_URL,
-      unsafe: process.env.PLENIPO_ALLOW_UNSAFE_DID_FETCH,
-    };
+    const previousEnv = captureEnv();
     const recipient = await createDidDocument('recipient.local');
     const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
     const fakeServer = {
@@ -151,22 +157,225 @@ describe('createPlenipoMcpServer', () => {
       restoreEnv(previousEnv);
     }
   });
+
+  it('executes receipt and external identity tool handlers from persisted local state', async () => {
+    const previousEnv = captureEnv();
+    const tempHome = mkdtempSync(join(tmpdir(), 'plenipo-mcp-tools-'));
+    const handlers = registerHandlers();
+
+    try {
+      process.env.PLENIPO_HOME = tempHome;
+      clearIdentityEnv();
+
+      const created = await createDidDocument('identity.local');
+      saveIdentity(
+        identityFromCreateResult({
+          did: created.did,
+          authSecretB64: created.privateKeys.authSecretKey,
+          encSecretB64: created.privateKeys.encSecretKey,
+          didDocumentUrl: created.documentUrl,
+          document: created.document,
+          relayUrl: 'ws://localhost:4000/agent/websocket',
+          registryUrl: 'http://localhost:4001',
+          coreUrl: 'http://localhost:4000',
+          didDocumentMode: 'external',
+          coreRegistered: true,
+          registrationPending: false,
+        }),
+      );
+
+      setMcpRuntime({
+        listReceipts: async (options?: { since?: string; limit?: number }) => [
+          {
+            envelope_id: '01JRECEIPT',
+            charged_tokens: 3,
+            since: options?.since,
+            limit: options?.limit,
+          },
+        ],
+      } as never);
+
+      const identityPayload = toolPayload(await handlers.get('plenipo_identity')!({}));
+      expect(identityPayload.did).toBe(created.did);
+      expect(identityPayload.didDocumentMode).toBe('external');
+
+      const receiptPayload = toolPayload(
+        await handlers.get('plenipo_receipts')!({
+          since: '2026-06-08T20:56:00Z',
+          limit: 2,
+        }),
+      );
+      const receipts = receiptPayload.receipts as Array<Record<string, unknown>>;
+      expect(receipts[0]?.envelope_id).toBe('01JRECEIPT');
+      expect(receipts[0]?.limit).toBe(2);
+
+      const syncPayload = toolPayload(await handlers.get('plenipo_sync_identity')!({}));
+      expect(syncPayload.ok).toBe(true);
+      expect(syncPayload.registration_pending).toBe(false);
+      expect(syncPayload.warnings).toEqual(['External identity; Core sync not required']);
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+      restoreEnv(previousEnv);
+    }
+  });
+
+  it('declares route and capabilities through Core-hosted identity sync', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousEnv = captureEnv();
+    const tempHome = mkdtempSync(join(tmpdir(), 'plenipo-mcp-core-tools-'));
+    const handlers = registerHandlers();
+
+    try {
+      process.env.PLENIPO_HOME = tempHome;
+      clearIdentityEnv();
+
+      const created = await createDidDocument('localhost', {
+        pathSegments: ['agents', 'tool-agent'],
+      });
+      saveIdentity(
+        identityFromCreateResult({
+          did: created.did,
+          authSecretB64: created.privateKeys.authSecretKey,
+          encSecretB64: created.privateKeys.encSecretKey,
+          didDocumentUrl: 'http://localhost:4000/v1/dids?did=did%3Aweb%3Alocalhost%3Aagents%3Atool-agent',
+          document: created.document,
+          relayUrl: 'ws://localhost:4000/agent/websocket',
+          registryUrl: 'http://localhost:4001',
+          coreUrl: 'http://localhost:4000',
+          didDocumentMode: 'core_hosted',
+          coreRegistered: true,
+          registrationPending: false,
+        }),
+      );
+
+      globalThis.fetch = (async (
+        input: Parameters<typeof fetch>[0],
+        init?: Parameters<typeof fetch>[1],
+      ) => {
+        const url = String(input);
+        if (url.endsWith('/auth/challenge')) {
+          return new Response(JSON.stringify({ nonce: Buffer.from('nonce').toString('base64url') }), {
+            status: 200,
+          });
+        }
+        if (url.endsWith('/v1/dids')) {
+          const body = JSON.parse(String(init?.body ?? '{}')) as {
+            document?: Record<string, unknown>;
+          };
+          return new Response(
+            JSON.stringify({
+              did: body.document?.id,
+              document_fingerprint: 'fingerprint-from-core',
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ error: 'unexpected url' }), { status: 404 });
+      }) as typeof fetch;
+
+      const routePayload = toolPayload(
+        await handlers.get('plenipo_declare_route')!({
+          protocols: ['plenipo.message.v1'],
+          capabilities: ['search'],
+          payment: {
+            price_per_kb_tokens: 5,
+            accepted_schemes: ['plenipo-prepaid-token'],
+          },
+          limits: {
+            max_message_kb: 128,
+            offline_queue_ttl_seconds: 3600,
+          },
+          replace: true,
+        }),
+      );
+      const route = routePayload.route as { capabilities: string[]; payment: { price_per_kb_tokens: number } };
+      expect(routePayload.did).toBe(created.did);
+      expect(route.capabilities).toContain('search');
+      expect(route.payment.price_per_kb_tokens).toBe(5);
+
+      const capabilityPayload = toolPayload(
+        await handlers.get('plenipo_declare_capabilities')!({
+          capabilities: ['analytics'],
+          replace: false,
+        }),
+      );
+      const capabilities = capabilityPayload.capabilities as string[];
+      expect(capabilities).toContain('search');
+      expect(capabilities).toContain('analytics');
+      expect(capabilityPayload.coreRegistered).toBe(true);
+
+      const syncPayload = toolPayload(await handlers.get('plenipo_sync_identity')!({}));
+      expect(syncPayload.ok).toBe(true);
+      expect(syncPayload.core_registered).toBe(true);
+      expect(syncPayload.did).toBe(created.did);
+    } finally {
+      globalThis.fetch = previousFetch;
+      rmSync(tempHome, { recursive: true, force: true });
+      restoreEnv(previousEnv);
+    }
+  });
 });
 
-function restoreEnv(previous: Record<string, string | undefined>): void {
-  const mapping = {
-    did: 'PLENIPO_DID',
-    auth: 'PLENIPO_AUTH_SECRET_B64',
-    doc: 'PLENIPO_DID_DOCUMENT_URL',
-    unsafe: 'PLENIPO_ALLOW_UNSAFE_DID_FETCH',
-  } as const;
+function registerHandlers(): Map<string, ToolHandler> {
+  const handlers = new Map<string, ToolHandler>();
+  const fakeServer = {
+    registerTool(
+      name: string,
+      _config: unknown,
+      handler: ToolHandler,
+    ) {
+      handlers.set(name, handler);
+    },
+  };
 
-  for (const [source, target] of Object.entries(mapping)) {
-    const value = previous[source];
+  registerPlenipoTools(fakeServer as never);
+  return handlers;
+}
+
+function toolPayload(result: unknown): Record<string, unknown> {
+  const content = (result as { content: Array<{ text: string }> }).content;
+  return JSON.parse(content[0]?.text ?? '{}') as Record<string, unknown>;
+}
+
+const ENV_KEYS = [
+  'PLENIPO_DID',
+  'PLENIPO_AUTH_SECRET_B64',
+  'PLENIPO_DID_PRIVATE_KEY',
+  'PLENIPO_DID_DOCUMENT_URL',
+  'PLENIPO_ENC_SECRET_B64',
+  'PLENIPO_HOME',
+  'PLENIPO_CORE_URL',
+  'PLENIPO_RELAY_URL',
+  'PLENIPO_REGISTRY_URL',
+  'PLENIPO_ALLOW_UNSAFE_DID_FETCH',
+] as const;
+
+function captureEnv(): Record<string, string | undefined> {
+  const captured: Record<string, string | undefined> = {};
+  for (const key of ENV_KEYS) {
+    captured[key] = process.env[key];
+  }
+  return captured;
+}
+
+function clearIdentityEnv(): void {
+  for (const key of [
+    'PLENIPO_DID',
+    'PLENIPO_AUTH_SECRET_B64',
+    'PLENIPO_DID_PRIVATE_KEY',
+    'PLENIPO_DID_DOCUMENT_URL',
+    'PLENIPO_ENC_SECRET_B64',
+  ]) {
+    delete process.env[key];
+  }
+}
+
+function restoreEnv(previous: Record<string, string | undefined>): void {
+  for (const [key, value] of Object.entries(previous)) {
     if (value === undefined) {
-      delete process.env[target];
+      delete process.env[key];
     } else {
-      process.env[target] = value;
+      process.env[key] = value;
     }
   }
 }

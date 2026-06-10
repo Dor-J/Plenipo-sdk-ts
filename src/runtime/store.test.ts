@@ -40,4 +40,10 @@ describe('RuntimeStore', () => {
     expect(store.getState('last_receipt_cursor')).toBe('cursor-1');
     store.close();
   });
+
+  it('sets SQLite user_version for runtime migrations', () => {
+    const store = new RuntimeStore(':memory:');
+    expect(store.schemaVersion()).toBe(1);
+    store.close();
+  });
 });

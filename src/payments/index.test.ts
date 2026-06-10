@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
   buildBundlePayment,
+  buildProductionBundlePayment,
   buildRelayPayment,
+  detectWalletCapabilities,
   encodePaymentPayload,
   mandatePrepare,
   parsePaymentRequired,
   purchaseBundle,
+  shouldAutoTopup,
 } from './index.js';
 
 const originalFetch = globalThis.fetch;
@@ -36,9 +39,11 @@ describe('payments', () => {
   test('buildRelayPayment binds envelope', () => {
     const proof = buildRelayPayment('did:web:a.local', 2, '01JENV');
     const json = JSON.parse(Buffer.from(proof, 'base64url').toString('utf8')) as {
+      scheme: string;
       purpose: string;
       envelope_id: string;
     };
+    expect(json.scheme).toBe('plenipo-prepaid-token');
     expect(json.purpose).toBe('relay');
     expect(json.envelope_id).toBe('01JENV');
   });
@@ -46,9 +51,51 @@ describe('payments', () => {
   test('buildBundlePayment includes bundle_id', () => {
     const proof = buildBundlePayment('did:web:a.local', 'starter', 100);
     const json = JSON.parse(Buffer.from(proof, 'base64url').toString('utf8')) as {
+      scheme: string;
       bundle_id: string;
     };
+    expect(json.scheme).toBe('x402-dev');
     expect(json.bundle_id).toBe('starter');
+  });
+
+  test('buildProductionBundlePayment includes production x402 settlement fields', () => {
+    const proof = buildProductionBundlePayment({
+      agentDid: 'did:web:a.example',
+      bundleId: 'starter',
+      amountCents: 100,
+      network: 'base-sepolia',
+      payTo: '0xabc',
+      payer: '0xdef',
+      signature: '0xsig',
+      paymentId: 'pay_prod_1',
+    });
+
+    const json = JSON.parse(Buffer.from(proof, 'base64url').toString('utf8')) as {
+      scheme: string;
+      network: string;
+      pay_to: string;
+      payer: string;
+      signature: string;
+    };
+
+    expect(json.scheme).toBe('x402');
+    expect(json.network).toBe('base-sepolia');
+    expect(json.pay_to).toBe('0xabc');
+    expect(json.payer).toBe('0xdef');
+    expect(json.signature).toBe('0xsig');
+  });
+
+  test('detectWalletCapabilities and auto-topup policy are explicit opt-in', () => {
+    expect(detectWalletCapabilities({}).available).toBe(false);
+    expect(
+      detectWalletCapabilities({
+        PLENIPO_X402_PRIVATE_KEY: 'secret',
+        CDP_API_KEY_ID: 'id',
+      }).providers,
+    ).toEqual(['raw-x402', 'coinbase-cdp']);
+
+    expect(shouldAutoTopup(10, { enabled: false, thresholdTokens: 100, maxAmountCents: 500 })).toBe(false);
+    expect(shouldAutoTopup(10, { enabled: true, thresholdTokens: 100, maxAmountCents: 500 })).toBe(true);
   });
 
   test('purchaseBundle handles 402 retry flow', async () => {
