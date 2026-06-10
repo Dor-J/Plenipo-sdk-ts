@@ -12,7 +12,7 @@ const DEFAULT_ROUTE = {
   payment: {
     model: 'per_kb',
     price_per_kb_tokens: 1,
-    accepted_schemes: ['plenipo-dev-token'],
+    accepted_schemes: ['plenipo-prepaid-token'],
   },
   limits: {
     max_message_kb: 256,

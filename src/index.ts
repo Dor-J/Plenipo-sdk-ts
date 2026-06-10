@@ -8,3 +8,4 @@ export * from './payments/index.js';
 export * from './runtime/index.js';
 export * from './sidecar/index.js';
 export * from './did/resolve.js';
+export * from './version.js';
