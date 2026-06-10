@@ -17,7 +17,7 @@ Active development. Core relay, Registry discovery, Route Records v1, MCP tools,
 - **Programmatic client** — `PlenipoClient` WebSocket relay with `listReceipts()`
 - **DID helpers** — W3C DID document generation, Core sync, Route Record declaration
 - **Crypto** — encrypt to recipient keys; decrypt on receive
-- **Payments (dev)** — per-ciphertext-KB billing with `plenipo-dev-token` on localhost agents
+- **Payments** — per-ciphertext-KB prepaid billing with `plenipo-prepaid-token` route metadata
 
 ## MCP Tools
 
@@ -85,7 +85,10 @@ bun run src/agent/index.ts sidecar --capability mcp --protocol plenipo.message.v
 - Token resolution: `--token` > `PLENIPO_SIDECAR_TOKEN` > `~/.plenipo/sidecar-token` > generated on first start
 - Inspect token file: `plenipo-agent sidecar-token` (use `--show` to print token with warning)
 - CORS disabled by default; allow browser origins with `--allow-origin` or `PLENIPO_SIDECAR_ALLOWED_ORIGINS`
+- For non-localhost deployments, set `--signed-request-secret` or `PLENIPO_SIDECAR_SIGNING_SECRET` to require timestamped HMAC request signatures in addition to bearer auth
 - `--no-auth` is localhost-only development mode (refuses non-localhost bind)
+- Config precedence is CLI > `PLENIPO_SIDECAR_*` env > JSON config > defaults; use `--config` or `PLENIPO_SIDECAR_CONFIG`
+- Local HTTPS requires both `--tls-cert` and `--tls-key` (or matching env/config values)
 
 ### WebSocket handshake debug (sanitized)
 
@@ -151,6 +154,10 @@ On first run the MCP auto-provisions `~/.plenipo/identity.json` offline and sync
 
 Never commit private keys. Use environment variables or a local, gitignored config file.
 
+## API Stability
+
+Stable wire contracts, JSON Schemas, OpenAPI specs, and deprecation rules are documented in `../COMPATIBILITY.md`. Stable protocol errors are cataloged in `../ERRORS.md`.
+
 ## Environment Variables
 
 | Variable | Description |
@@ -161,9 +168,13 @@ Never commit private keys. Use environment variables or a local, gitignored conf
 | `PLENIPO_DID_DOCUMENT_URL` | Hosted DID document URL (production) |
 | `PLENIPO_RELAY_URL` | WebSocket URL of the Plenipo relay |
 | `PLENIPO_HOME` | Identity directory (default `~/.plenipo`) |
+| `PLENIPO_SIDECAR_CONFIG` | Sidecar JSON config path |
 | `PLENIPO_SIDECAR_TOKEN` | Bearer token for sidecar API |
 | `PLENIPO_SIDECAR_URL` | Sidecar base URL (default `http://127.0.0.1:8787`) |
 | `PLENIPO_SIDECAR_ALLOWED_ORIGINS` | Comma-separated browser Origin allowlist |
+| `PLENIPO_SIDECAR_SIGNING_SECRET` | Optional HMAC secret for signed sidecar API requests |
+| `PLENIPO_SIDECAR_TLS_CERT` | TLS certificate file for local HTTPS |
+| `PLENIPO_SIDECAR_TLS_KEY` | TLS private key file for local HTTPS |
 
 ## Development (Bun)
 
@@ -186,7 +197,10 @@ Docker sidecar:
 
 ```bash
 docker build -f Plenipo-sdk-ts/Dockerfile.agent -t plenipo-agent-ts Plenipo-sdk-ts
+docker compose -f infra/sidecar/docker-compose.sidecar-prod.yml --profile typescript up -d --build
 ```
+
+Production packaging assets live in `infra/sidecar`: systemd units, Windows service scripts, config templates, Docker Compose, backup/restore, and lost-key recovery guidance.
 
 ## Contributing
 

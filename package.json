@@ -3,17 +3,49 @@
   "version": "0.0.1",
   "description": "Plenipo MCP skill and TypeScript client for agent-to-agent communication",
   "type": "module",
-  "private": true,
+  "private": false,
   "license": "MIT",
+  "author": "Plenipo Contributors",
+  "homepage": "https://github.com/plenipo/plenipo/tree/main/Plenipo-sdk-ts#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/plenipo/plenipo.git",
+    "directory": "Plenipo-sdk-ts"
+  },
+  "bugs": {
+    "url": "https://github.com/plenipo/plenipo/issues"
+  },
+  "keywords": [
+    "plenipo",
+    "agent",
+    "did",
+    "mcp",
+    "sidecar",
+    "encrypted-messaging"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "bin": {
     "plenipo-mcp": "./dist/mcp/index.js",
     "plenipo-agent": "./dist/agent/index.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "build": "bun build ./src/mcp/index.ts --outdir ./dist/mcp --target bun && bun build ./src/agent/index.ts --outdir ./dist/agent --target bun && bun build ./src/index.ts --outdir ./dist --target bun",
+    "build": "bun build ./src/mcp/index.ts --outdir ./dist/mcp --target bun && bun build ./src/agent/index.ts --outdir ./dist/agent --target bun && bun build ./src/index.ts --outdir ./dist --target bun && tsc -p tsconfig.build.json --emitDeclarationOnly",
     "dev": "bun --watch src/mcp/index.ts",
     "start": "bun src/mcp/index.ts",
     "local-lab:identity": "bun run scripts/create-local-identity.ts",
@@ -24,6 +56,7 @@
     "test:e2e:sidecar-durable-events": "bun run scripts/test-agent-sidecar-durable-events-ts.ts",
     "debug:ws-handshake": "bun run scripts/debug-ws-handshake.ts",
     "test:coverage": "bun test --coverage",
+    "coverage:global": "bun run scripts/check-global-coverage.ts coverage/lcov.info 80",
     "coverage:critical": "bun run scripts/check-critical-coverage.ts coverage/lcov.info 90",
     "typecheck": "tsc --noEmit",
     "lint": "bun run typecheck"
